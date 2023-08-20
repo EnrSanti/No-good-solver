@@ -1,0 +1,7 @@
+﻿  no_good_solver.c
+C:\Users\santi\source\repos\architetture\no_good_solver.c(34,11): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+C:\Users\santi\source\repos\architetture\no_good_solver.c(68,5): warning C4996: 'fscanf': This function or variable may be unsafe. Consider using fscanf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+C:\Users\santi\source\repos\architetture\no_good_solver.c(69,5): warning C4996: 'fscanf': This function or variable may be unsafe. Consider using fscanf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+C:\Users\santi\source\repos\architetture\no_good_solver.c(87,3): warning C4996: 'fscanf': This function or variable may be unsafe. Consider using fscanf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+C:\Users\santi\source\repos\architetture\no_good_solver.c(113,38): warning C4020: 'malloc': too many actual parameters
+  NoGood.vcxproj -> C:\Users\santi\source\repos\architetture\x64\Debug\NoGood.exe
