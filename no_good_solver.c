@@ -5,6 +5,9 @@
 
 #define UNSATISFIED -2
 #define SATISFIED 2
+#define NEGATED_LIT -1
+#define POSITIVE_LIT 1
+#define UNASSIGNED 0
 
 void readFile_allocateMatrix(const char *);
 void printError(char *);
@@ -21,7 +24,7 @@ int noVars=0; //the number of vars
 int noNoGoods=0; //the no of clauses
 int nonSatisfied=0; //the number of non satisfied clauses
 int **matrix=NULL; //the matrix that holds the clauses
-
+int *partialAssignment;//we skip the cell 0 in order to maintain coherence with the var numbering
 
 void main(int argc, char const *argv[]){
 	
@@ -31,7 +34,11 @@ void main(int argc, char const *argv[]){
 	}
 
 	readFile_allocateMatrix(argv[1]);
-    printMatrix();
+	printMatrix();
+	partialAssignment=(int *) calloc(noVars+1, sizeof(int));
+	
+	pureLiteralCheck();
+
     solve();
 
     deallocateMatrix();
@@ -105,9 +112,9 @@ void popualteMatrix(FILE* ptr){
 			clauseCounter++;
 		}else{
             if (literal > 0)
-                matrix[clauseCounter][literal] = 1;
+                matrix[clauseCounter][literal] = POSITIVE_LIT;
             else
-                matrix[clauseCounter][-literal] = -1;
+                matrix[clauseCounter][-literal] = NEGATED_LIT;
 		}
 	}
 
@@ -145,15 +152,17 @@ void deallocateMatrix(){
 void solve(){
     if (nonSatisfied==0) {
         printf("SATISFIABLR\n");
-
 		return;
     }
 }
 
-void unitPropagation()
-{
+void unitPropagation(){
+
+}
+void pureLiteralCheck(){
+
 }
 
-void backJump()
-{
+void backJump(){
+
 }
