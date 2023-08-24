@@ -7,6 +7,13 @@
 #define UNSATISFIED -2
 #define SATISFIED 2
 
+//for unit propagation
+#define CONFLICT -3
+
+//for the problem
+#define SATISFIABLE true
+#define UNSATISFIABLE false
+
 //for the literals in the matrix
 #define NEGATED_LIT -1
 #define POSITIVE_LIT 1
@@ -30,11 +37,14 @@ void printMatrix();
 void printVarArray(int *);
 void allocateMatrix();
 void deallocateMatrix();
-void solve();
-void unitPropagation();
+bool solve(int,int);
+int unitPropagation();
 void backJump();
 void pureLiteralCheck();
 void removeNoGoodSetsContaining(int,int);
+int chooseVar();
+void learnClause();
+void assignValueToVar(int, int);
 
 int noVars=0; //the number of vars
 int noNoGoods=0; //the no of clauses (initial)
@@ -54,20 +64,31 @@ void main(int argc, char const *argv[]){
 
     
     readFile_allocateMatrix(argv[1]);
+
     printMatrix();
     printf("The status of the variables in the clauses: (%d doesn't appear, %d just positive, %d just negative, %d both)\n",FIRST_APPEARENCE, APPEARS_ONLY_POS,   APPEARS_ONLY_NEG,   APPEARS_BOTH);
     printVarArray(varBothNegatedAndNot);
     printf("\n");
-	partialAssignment=(int *) calloc(noVars+1, sizeof(int));
-
-
 	
-    
+    partialAssignment=(int *) calloc(noVars+1, sizeof(int));
 	pureLiteralCheck();
+    if (unitPropagation() == CONFLICT) {
+        printf("UNSATISFIABLE\n");
+        return;
+    }
     printMatrix();
-    solve();
+
+    int varToAssign = chooseVar();
+    if (solve(varToAssign, TRUE) || solve(varToAssign, FALSE)) {
+        printf("SATISFIABLE\n");
+        printf("Assignment:\n");
+        printVarArray(partialAssignment);
+    }else {
+        printf("UNSATISFIABLE\n");
+    }
 
     deallocateMatrix();
+    
 }
 
 
@@ -119,7 +140,7 @@ void readFile_allocateMatrix(const char *str){
 
     currentNoGoods=noNoGoods;
 
-    popualteMatrix(ptr, varBothNegatedAndNot);
+    popualteMatrix(ptr);
     
     fclose(ptr);
 }
@@ -204,16 +225,25 @@ void printVarArray(int *array) {
     }
 }
 
-void solve(){
+bool solve(int var, int value){
+
+    assignValueToVar(var, value);
+    pureLiteralCheck();
+    learnClause();
+    if(unitPropagation()==CONFLICT)
+		return false;
+    
     if (currentNoGoods==0) {
         printf("SATISFIABLE\n");
         printf("Assignment:\n");
         printVarArray(partialAssignment);
-		return;
+		return true;
     }
-}
+    int varToAssign = chooseVar();
+    return solve(varToAssign, TRUE) || solve(varToAssign, FALSE);
+ }
 
-void unitPropagation(){
+int unitPropagation(){
     for (int i = 0; i < noNoGoods; i++) {
 		if (noOfVarPerNoGood[i] == 1) {
             //lonelyVar[i] is a column index
@@ -221,7 +251,9 @@ void unitPropagation(){
             removeNoGoodSetsContaining(lonelyVar[i], partialAssignment[lonelyVar[i]] == TRUE ? NEGATED_LIT : POSITIVE_LIT);
         }
 	}
+    return CONFLICT;
 }
+
 void pureLiteralCheck(){
     for (int i = 1; i < noVars; i++) {
         if (varBothNegatedAndNot[i] == APPEARS_ONLY_POS) {
@@ -248,4 +280,21 @@ void removeNoGoodSetsContaining(int varIndex,int sign) {
 			currentNoGoods -= 1;
 		}
 	}
+}
+int chooseVar() {
+    //return the fist unassigned var
+    for(int i = 1; i < noVars; i++) {
+		if (partialAssignment[i] == UNASSIGNED) {
+			return i;
+		}
+	}
+    return -1;
+}
+void assignValueToVar(int varToAssign, int value){
+	partialAssignment[varToAssign] = value;
+    removeNoGoodSetsContaining(varToAssign, value == TRUE ? NEGATED_LIT : POSITIVE_LIT);
+}
+void learnClause(){
+    return;
+    //TODO
 }
