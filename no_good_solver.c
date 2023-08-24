@@ -9,6 +9,7 @@
 
 //for unit propagation
 #define CONFLICT -3
+#define NO_CONFLICT 3
 
 //for the problem
 #define SATISFIABLE true
@@ -45,7 +46,7 @@ void removeNoGoodSetsContaining(int,int);
 int chooseVar();
 void learnClause();
 void assignValueToVar(int, int);
-
+int removeLiteralFromNoGoods(int, int);
 int noVars=0; //the number of vars
 int noNoGoods=0; //the no of clauses (initial)
 int currentNoGoods=0; //the number of non satisfied clauses (yet)
@@ -74,10 +75,17 @@ void main(int argc, char const *argv[]){
 	pureLiteralCheck();
     if (unitPropagation() == CONFLICT) {
         printf("UNSATISFIABLE\n");
+        deallocateMatrix();
         return;
     }
     printMatrix();
-
+    if(currentNoGoods == 0) {
+		printf("SATISFIABLE\n");
+		printf("Assignment:\n");
+		printVarArray(partialAssignment);
+        deallocateMatrix();
+		return;
+	}
     int varToAssign = chooseVar();
     if (solve(varToAssign, TRUE) || solve(varToAssign, FALSE)) {
         printf("SATISFIABLE\n");
@@ -249,9 +257,11 @@ int unitPropagation(){
             //lonelyVar[i] is a column index
             partialAssignment[lonelyVar[i]]= matrix[i][lonelyVar[i]] > 0 ? FALSE : TRUE;
             removeNoGoodSetsContaining(lonelyVar[i], partialAssignment[lonelyVar[i]] == TRUE ? NEGATED_LIT : POSITIVE_LIT);
+            if (removeLiteralFromNoGoods(lonelyVar[i], partialAssignment[lonelyVar[i]] == TRUE ? POSITIVE_LIT : NEGATED_LIT )== CONFLICT) 
+                return CONFLICT;
         }
 	}
-    return CONFLICT;
+    return NO_CONFLICT;
 }
 
 void pureLiteralCheck(){
@@ -264,10 +274,6 @@ void pureLiteralCheck(){
             removeNoGoodSetsContaining(i,NEGATED_LIT);
         }
     }
-}
-
-void backJump(){
-
 }
 
 void removeNoGoodSetsContaining(int varIndex,int sign) {
@@ -297,4 +303,18 @@ void assignValueToVar(int varToAssign, int value){
 void learnClause(){
     return;
     //TODO
+}
+int removeLiteralFromNoGoods(int varIndex, int sign) {
+	//scan column (varIndex) of matrix
+	for (int i = 0; i < noNoGoods; i++) {
+		if (matrix[i][varIndex] == sign) {
+			//remove the literal
+			matrix[i][varIndex] = 0;
+			noOfVarPerNoGood[i]--;
+			if (noOfVarPerNoGood[i] == 0) {
+				return CONFLICT;
+			}
+		}
+	}
+	return NO_CONFLICT;
 }
