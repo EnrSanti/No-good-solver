@@ -34,15 +34,15 @@
 void readFile_allocateMatrix(const char *, struct NoGoodData*);
 void printError(char *);
 void popualteMatrix(FILE*, struct NoGoodData*);
-void printMatrix(int**);
+void printMatrix(int **);
 void printVarArray(int *);
-void allocateMatrix(struct NoGoodData*);
-void deallocateMatrix(int**);
+void allocateMatrix(int ***);
+void deallocateMatrix(int ***);
 bool solve(struct NoGoodData,int,int);
 int unitPropagation(struct NoGoodData* );
 //void backJump();
 void pureLiteralCheck(struct NoGoodData*);
-void removeNoGoodSetsContaining(int**, int*,int,int);
+void removeNoGoodSetsContaining(int***, int*,int,int);
 int chooseVar();
 void learnClause();
 void assignValueToVar(struct NoGoodData*,int, int);
@@ -77,10 +77,12 @@ void main(int argc, char const *argv[]){
     printf("\n");
 	
     data.partialAssignment=(int *) calloc(noVars+1, sizeof(int));
+
 	pureLiteralCheck(&data);
+    
     if (unitPropagation(&data) == CONFLICT) {
         printf("UNSATISFIABLE\n");
-        deallocateMatrix(data.matrix);
+        deallocateMatrix(&(data.matrix));
         return;
     }
     
@@ -90,10 +92,11 @@ void main(int argc, char const *argv[]){
 		printf("SATISFIABLE\n");
 		printf("Assignment:\n");
 		printVarArray(data.partialAssignment);
-        deallocateMatrix(data.matrix);
+        deallocateMatrix(&(data.matrix));
 		return;
 	}
     int varToAssign = chooseVar(data.partialAssignment);
+
     if (solve(data, varToAssign, TRUE) || solve(data, varToAssign, FALSE)) {
         printf("SATISFIABLE\n");
         printf("Assignment:\n");
@@ -101,8 +104,7 @@ void main(int argc, char const *argv[]){
     }else {
         printf("UNSATISFIABLE\n");
     }
-
-    deallocateMatrix(data.matrix);
+    deallocateMatrix(&(data.matrix));
 
 }
 
@@ -162,8 +164,7 @@ void readFile_allocateMatrix(const char *str,struct NoGoodData* data){
 
 void popualteMatrix(FILE* ptr, struct NoGoodData* data){
 
-   
-	allocateMatrix(data);
+	allocateMatrix(&(data->matrix));
     varBothNegatedAndNot = (int *)calloc(noVars + 1, sizeof(int));
     data->noOfVarPerNoGood = (int *)calloc(noNoGoods, sizeof(int));
     data->lonelyVar = (int *)calloc(noNoGoods, sizeof(int));
@@ -224,19 +225,20 @@ void printMatrix(int ** matrix){
     printf("\n");
 }
 
-void allocateMatrix(struct NoGoodData* data){
-	data->matrix = (int **) calloc(noNoGoods, sizeof(int *));
+void allocateMatrix(int*** matrix){
+	*matrix = (int **) calloc(noNoGoods, sizeof(int *));
 	for (int i = 0; i < noNoGoods; i++){
- 		data->matrix[i] = (int *) calloc(noVars+1, sizeof(int));
+ 		(*matrix)[i] = (int *) calloc(noVars+1, sizeof(int));
 	}
+
 }
 
-void deallocateMatrix(int **matrix){
+void deallocateMatrix(int ***matrix){
 
 	for (int i = 0; i < noNoGoods; i++){
- 		free(matrix[i]);
+ 		free((*matrix)[i]);
 	}
-	free(matrix);
+	free((*matrix));
 }
 
 void printVarArray(int *array) {
@@ -259,7 +261,7 @@ bool solve(struct NoGoodData data,int var, int value){
         printVarArray(data.partialAssignment);
 		return true;
     }
-    int varToAssign = chooseVar(&(data.partialAssignment));
+    int varToAssign = chooseVar(data.partialAssignment);
     return solve(data,varToAssign, TRUE) || solve(data, varToAssign, FALSE);
  }
 
@@ -267,8 +269,8 @@ int unitPropagation(struct NoGoodData* data){
     for (int i = 0; i < noNoGoods; i++) {
 		if (data->noOfVarPerNoGood[i] == 1) {
             //lonelyVar[i] is a column index
-            data->partialAssignment[data->lonelyVar[i]]= data->matrix[i][data->lonelyVar[i]] > 0 ? FALSE : TRUE;
-            removeNoGoodSetsContaining(data->matrix, &(data->currentNoGoods),data->lonelyVar[i], (data->partialAssignment[data->lonelyVar[i]]) == TRUE ? NEGATED_LIT : POSITIVE_LIT);
+            data->partialAssignment[data->lonelyVar[i]] = data->matrix[i][data->lonelyVar[i]] > 0 ? FALSE : TRUE;
+            removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),data->lonelyVar[i], (data->partialAssignment[data->lonelyVar[i]]) == TRUE ? NEGATED_LIT : POSITIVE_LIT);
             if (removeLiteralFromNoGoods(data, data->lonelyVar[i], data->partialAssignment[data->lonelyVar[i]] == TRUE ? POSITIVE_LIT : NEGATED_LIT)== CONFLICT) 
                 return CONFLICT;
         }
@@ -280,21 +282,21 @@ void pureLiteralCheck(struct NoGoodData* data){
     for (int i = 1; i < noVars; i++) {
         if (varBothNegatedAndNot[i] == APPEARS_ONLY_POS) {
 			data->partialAssignment[i] = FALSE;
-            removeNoGoodSetsContaining(data->matrix, &(data->currentNoGoods),i,POSITIVE_LIT);
+            removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),i,POSITIVE_LIT);
 		} else if (varBothNegatedAndNot[i] == APPEARS_ONLY_NEG) {
             data->partialAssignment[i] = TRUE;
-            removeNoGoodSetsContaining(data->matrix, &(data->currentNoGoods),i,NEGATED_LIT);
+            removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),i,NEGATED_LIT);
         }
     }
 }
 
-void removeNoGoodSetsContaining(int** matrix,int *currentNoGoods,int varIndex,int sign) {
+void removeNoGoodSetsContaining(int*** matrix,int *currentNoGoods,int varIndex,int sign) {
 
     //scan column (varIndex) of matrix
     for (int i = 0; i < noNoGoods; i++) {
-		if (matrix[i][varIndex] == sign) {
+		if ((*matrix)[i][varIndex] == sign) {
 			//remove the nogood set
-            matrix[i][0] = SATISFIED;
+            (*matrix)[i][0] = SATISFIED;
 			(*currentNoGoods)--;
 		}
 	}
@@ -307,11 +309,12 @@ int chooseVar(int * partialAssignment) {
 			return i;
 		}
 	}
+    //if all vars are assigned return -1 (never)
     return -1;
 }
 void assignValueToVar(struct NoGoodData* data, int varToAssign, int value) {
 	data->partialAssignment[varToAssign] = value;
-    removeNoGoodSetsContaining(data->matrix, &(data->currentNoGoods),varToAssign, value == TRUE ? NEGATED_LIT : POSITIVE_LIT);
+    removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),varToAssign, value == TRUE ? NEGATED_LIT : POSITIVE_LIT);
 }
 
 void learnClause(){
