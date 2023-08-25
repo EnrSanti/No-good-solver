@@ -34,10 +34,10 @@
 void readFile_allocateMatrix(const char *, struct NoGoodData*);
 void printError(char *);
 void popualteMatrix(FILE*, struct NoGoodData*);
-void printMatrix(int **);
+void printMatrix(int**);
 void printVarArray(int *);
 void allocateMatrix(int ***);
-void deallocateMatrix(int ***);
+void deallocateMatrix(int***);
 bool solve(struct NoGoodData,int,int);
 int unitPropagation(struct NoGoodData* );
 //void backJump();
@@ -86,7 +86,6 @@ void main(int argc, char const *argv[]){
         return;
     }
     
-    printMatrix(data.matrix);
 
     if(data.currentNoGoods == 0) {
 		printf("SATISFIABLE\n");
