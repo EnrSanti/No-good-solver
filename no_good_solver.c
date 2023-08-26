@@ -31,6 +31,15 @@
 #define APPEARS_ONLY_NEG -1
 #define APPEARS_BOTH 3
 
+struct NoGoodData {
+    int currentNoGoods; //the number of non satisfied clauses (yet)
+    int** matrix; //the matrix that holds the clauses
+    int* partialAssignment;//we skip the cell 0 in order to maintain coherence with the var numbering
+    int* noOfVarPerNoGood; //a int array that holds the number of variables in each clause
+    int* lonelyVar; //a int array that holds if noOfVarPerNoGood[i]==1 the index of the only variable in the clause
+    //int varsYetToBeAssigned; //the number of variables that are not yet assigned
+};
+
 void readFile_allocateMatrix(const char *, struct NoGoodData*);
 void printError(char *);
 void popualteMatrix(FILE*, struct NoGoodData*);
@@ -53,14 +62,6 @@ int noVars=0; //the number of vars
 int noNoGoods=0; //the no of clauses (initial)
 int *varBothNegatedAndNot = NULL; //a int array that holds the status of the variables in the clauses (see the defines above)
 
-struct NoGoodData {
-    int currentNoGoods; //the number of non satisfied clauses (yet)
-    int** matrix; //the matrix that holds the clauses
-    int* partialAssignment;//we skip the cell 0 in order to maintain coherence with the var numbering
-    int* noOfVarPerNoGood; //a int array that holds the number of variables in each clause
-    int* lonelyVar; //a int array that holds if noOfVarPerNoGood[i]==1 the index of the only variable in the clause
-    //int varsYetToBeAssigned; //the number of variables that are not yet assigned
-};
 
 void main(int argc, char const *argv[]){
 	
@@ -68,7 +69,7 @@ void main(int argc, char const *argv[]){
 		printError("Insert the file path");
 		return;
 	}
-    argv[1] = "testsNG\\test_8.txt";
+    argv[1] = "testsNG/test_10.txt";
     struct NoGoodData data;
     readFile_allocateMatrix(argv[1],&data);
     printMatrix(data.matrix);
@@ -94,6 +95,7 @@ void main(int argc, char const *argv[]){
         deallocateMatrix(&(data.matrix));
 		return;
 	}
+
     int varToAssign = chooseVar(data.partialAssignment);
 
     if (solve(data, varToAssign, TRUE) || solve(data, varToAssign, FALSE)) {
