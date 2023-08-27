@@ -37,7 +37,7 @@ struct NoGoodData {
     int* partialAssignment;//we skip the cell 0 in order to maintain coherence with the var numbering
     int* noOfVarPerNoGood; //a int array that holds the number of variables in each clause
     int* lonelyVar; //a int array that holds if noOfVarPerNoGood[i]==1 the index of the only variable in the clause
-    //int varsYetToBeAssigned; //the number of variables that are not yet assigned
+    int varsYetToBeAssigned; //the number of variables that are not yet assigned
 };
 
 void readFile_allocateMatrix(const char *, struct NoGoodData*);
@@ -69,7 +69,7 @@ void main(int argc, char const *argv[]){
 		printError("Insert the file path");
 		return;
 	}
-    argv[1] = "testsNG/test_10.txt";
+    argv[1] = "testsNG/test_3.txt";
     struct NoGoodData data;
     readFile_allocateMatrix(argv[1],&data);
     printMatrix(data.matrix);
@@ -157,7 +157,7 @@ void readFile_allocateMatrix(const char *str,struct NoGoodData* data){
     printf("number of nogoods: %d \n",noNoGoods);
 
     data->currentNoGoods=noNoGoods;
-    //data->varsYetToBeAssigned=noVars;
+    data->varsYetToBeAssigned=noVars;
 
     popualteMatrix(ptr,data);
     
@@ -264,8 +264,16 @@ bool solve(struct NoGoodData data,int var, int value){
         printVarArray(data.partialAssignment);
 		return true;
     }   
-    int varsYetToBeAssigned=sum(data.partialAssignment);
-    if (varsYetToBeAssigned==0) {
+    
+    int varsYetToBeAssigned2=sum(data.partialAssignment);
+    
+    if(varsYetToBeAssigned2!=data.varsYetToBeAssigned){
+    	printf("XXXXXXXXXXXXXXXXXXXX\n");
+    }else{
+    	printf("OK\n");
+    }
+
+    if (data.varsYetToBeAssigned==0) {
 		return false;
     }
 
@@ -278,7 +286,7 @@ int unitPropagation(struct NoGoodData* data){
 		if (data->matrix[i][0] ==UNSATISFIED &&  data->noOfVarPerNoGood[i] == 1) {
             //lonelyVar[i] is a column index
             data->partialAssignment[data->lonelyVar[i]] = data->matrix[i][data->lonelyVar[i]] > 0 ? FALSE : TRUE;
-            //data->varsYetToBeAssigned--;
+            data->varsYetToBeAssigned--;
             removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),data->lonelyVar[i], (data->partialAssignment[data->lonelyVar[i]]) == TRUE ? NEGATED_LIT : POSITIVE_LIT);
             if (removeLiteralFromNoGoods(data, data->lonelyVar[i], data->partialAssignment[data->lonelyVar[i]] == TRUE ? POSITIVE_LIT : NEGATED_LIT)== CONFLICT) 
                 return CONFLICT;
@@ -292,11 +300,11 @@ void pureLiteralCheck(struct NoGoodData* data){
         if(data->partialAssignment[i] == UNASSIGNED){
             if (varBothNegatedAndNot[i] == APPEARS_ONLY_POS) {
 			    data->partialAssignment[i] = FALSE;
-               // data->varsYetToBeAssigned--;
+                data->varsYetToBeAssigned--;
                 removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),i,POSITIVE_LIT);
 		    } else if (varBothNegatedAndNot[i] == APPEARS_ONLY_NEG) {
                 data->partialAssignment[i] = TRUE;
-               // data->varsYetToBeAssigned--;
+                data->varsYetToBeAssigned--;
                 removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),i,NEGATED_LIT);
             }
         }
@@ -327,7 +335,7 @@ int chooseVar(int * partialAssignment) {
 }
 void assignValueToVar(struct NoGoodData* data, int varToAssign, int value) {
 	data->partialAssignment[varToAssign] = value;
-    //data->varsYetToBeAssigned--;
+    data->varsYetToBeAssigned--;
     removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),varToAssign, value == TRUE ? NEGATED_LIT : POSITIVE_LIT);
 }
 
