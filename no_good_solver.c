@@ -57,7 +57,6 @@ void learnClause();
 void assignValueToVar(struct NoGoodData*,int, int);
 int removeLiteralFromNoGoods(struct NoGoodData* ,int, int);
 void storePrevState(struct NoGoodData, int**, int**, int**, int**);
-int sum(int* array);
 void revert(struct NoGoodData*, int**, int**, int**, int**);
 
 int noVars=0; //the number of vars
@@ -72,7 +71,7 @@ void main(int argc, char const *argv[]){
 		printError("Insert the file path");
 		return;
 	}
-    argv[1] = "testsNG\\test_10.txt";
+    argv[1] = "testsNG\\test_20.txt";
     struct NoGoodData data;
     readFile_allocateMatrix(argv[1],&data);
     printMatrix(data.matrix);
@@ -275,14 +274,6 @@ bool solve(struct NoGoodData data, int var, int value) {
 		return true;
     }   
     
-    int varsYetToBeAssigned2=sum(data.partialAssignment);
-    
-    if(varsYetToBeAssigned2!=data.varsYetToBeAssigned){
-    	printf("XXXXXXXXXXXXXXXXXXXX\n");
-    }else{
-    	printf("OK\n");
-    }
-
     if (data.varsYetToBeAssigned==0) {
         revert(&data, &prevPartialAssignment, &prevNoOfVarPerNoGood, &prevLonelyVar, &noGoodStatus);
 		return false;
@@ -376,14 +367,6 @@ int removeLiteralFromNoGoods(struct NoGoodData* data, int varIndex, int sign) {
 		}
 	}
 	return NO_CONFLICT;
-}
-int sum(int *array) {
-	int sum = 0;
-	for (int i = 1; i < noVars + 1; i++) {
-        if(array[i]==UNASSIGNED)
-		    sum += 1;
-	}
-	return sum;
 }
 void storePrevState(struct NoGoodData data, int** prevPartialAssignment, int** prevNoOfVarPerNoGood, int** prevLonelyVar, int** noGoodStatus) {
     (*prevPartialAssignment)=(int*)calloc(noVars + 1, sizeof(int));
