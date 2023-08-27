@@ -18,7 +18,7 @@
 //for the literals in the matrix
 #define NEGATED_LIT -1
 #define POSITIVE_LIT 1
-
+#define NO_LIT 0
 //for the literals in the partial assignment
 #define UNASSIGNED 0
 #define TRUE 1
@@ -71,12 +71,12 @@ void main(int argc, char const *argv[]){
 		printError("Insert the file path");
 		return;
 	}
-    argv[1] = "testsNG\\test_20.txt";
+    argv[1] = "testsNG\\test_3.txt";
     struct NoGoodData data;
     readFile_allocateMatrix(argv[1],&data);
     printMatrix(data.matrix);
-    printf("The status of the variables in the clauses: (%d doesn't appear, %d just positive, %d just negative, %d both)\n",FIRST_APPEARENCE, APPEARS_ONLY_POS,   APPEARS_ONLY_NEG,   APPEARS_BOTH);
-    printVarArray(varBothNegatedAndNot);
+    //printf("The status of the variables in the clauses: (%d doesn't appear, %d just positive, %d just negative, %d both)\n",FIRST_APPEARENCE, APPEARS_ONLY_POS,   APPEARS_ONLY_NEG,   APPEARS_BOTH);
+    //printVarArray(varBothNegatedAndNot);
     printf("\n");
 	
     data.partialAssignment=(int *) calloc(noVars+1, sizeof(int));
@@ -84,14 +84,14 @@ void main(int argc, char const *argv[]){
 	pureLiteralCheck(&data);
     
     if (unitPropagation(&data) == CONFLICT) {
-        printf("UNSATISFIABLE\n");
+        printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
         deallocateMatrix(&(data.matrix));
         return;
     }
     
 
     if(data.currentNoGoods == 0) {
-		printf("SATISFIABLE\n");
+        printf("\n\n\n**********SATISFIABLE**********\n\n\n");
 		printf("Assignment:\n");
 		printVarArray(data.partialAssignment);
         deallocateMatrix(&(data.matrix));
@@ -189,7 +189,7 @@ void popualteMatrix(FILE* ptr, struct NoGoodData* data){
             int sign = literal > 0 ? POSITIVE_LIT : NEGATED_LIT;
             data->matrix[clauseCounter][literal*sign] = sign;
             data->noOfVarPerNoGood[clauseCounter]++;
-            //if i have more vars i won't read this, so it can contain a wrong value
+            //if i have more vars i won't read this, so it can contain a wrong value (if the literal is just one the value will be correct)
             data->lonelyVar[clauseCounter] = literal * sign;
 
             //populate the varBothNegatedAndNot array
@@ -280,6 +280,7 @@ bool solve(struct NoGoodData data, int var, int value) {
     }
 
     int varToAssign = chooseVar(data.partialAssignment);
+    //the check is done just for reverting purposes in case we need to backtrack
     if ((solve(data, varToAssign, TRUE) || solve(data, varToAssign, FALSE)) == false) {
         revert(&data, &prevPartialAssignment, &prevNoOfVarPerNoGood, &prevLonelyVar, &noGoodStatus);
 		return false;
@@ -344,10 +345,6 @@ void assignValueToVar(struct NoGoodData* data, int varToAssign, int value) {
     data->varsYetToBeAssigned--;
     removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),varToAssign, value == TRUE ? NEGATED_LIT : POSITIVE_LIT);
 }
-void unassignVar(struct NoGoodData* data, int varToUnassign) {
-	data->partialAssignment[varToUnassign] = UNASSIGNED;
-	data->varsYetToBeAssigned++;
-}
 void learnClause(){
     return;
     //TODO
@@ -361,6 +358,14 @@ int removeLiteralFromNoGoods(struct NoGoodData* data, int varIndex, int sign) {
             
             //remove the literal
             data->noOfVarPerNoGood[i]--;
+            if(data->noOfVarPerNoGood==1){
+                //search and assing the literal to the lonelyVar
+                for (int j = 1; j < noVars + 1; j++) {
+					if (data->matrix[i][j] != NO_LIT && data->partialAssignment[j]==UNASSIGNED) {
+                        data->lonelyVar[i] = j;
+					}
+				}
+			}
 			if (data->noOfVarPerNoGood[i] == 0) {
 				return CONFLICT;
 			}
