@@ -55,13 +55,16 @@ void removeNoGoodSetsContaining(int***, int*,int,int);
 int chooseVar();
 void learnClause();
 void assignValueToVar(struct NoGoodData*,int, int);
-int removeLiteralFromNoGoods(struct NoGoodData* data,int, int);
+int removeLiteralFromNoGoods(struct NoGoodData* ,int, int);
+void storePrevState(struct NoGoodData, int**, int**, int**, int**);
 int sum(int* array);
+void revert(struct NoGoodData*, int**, int**, int**, int**);
 
 int noVars=0; //the number of vars
 int noNoGoods=0; //the no of clauses (initial)
 int *varBothNegatedAndNot = NULL; //a int array that holds the status of the variables in the clauses (see the defines above)
-
+bool breakSearchAfterOne=false; //if true, the search will stop after the first solution is found
+bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 void main(int argc, char const *argv[]){
 	
@@ -69,7 +72,7 @@ void main(int argc, char const *argv[]){
 		printError("Insert the file path");
 		return;
 	}
-    argv[1] = "testsNG/test_3.txt";
+    argv[1] = "testsNG\\test_10.txt";
     struct NoGoodData data;
     readFile_allocateMatrix(argv[1],&data);
     printMatrix(data.matrix);
@@ -99,11 +102,9 @@ void main(int argc, char const *argv[]){
     int varToAssign = chooseVar(data.partialAssignment);
 
     if (solve(data, varToAssign, TRUE) || solve(data, varToAssign, FALSE)) {
-        printf("SATISFIABLE\n");
-        printf("Assignment:\n");
-        printVarArray(data.partialAssignment);
+        printf("\n\n\n**********SATISFIABLE**********\n\n\n");
     }else {
-        printf("UNSATISFIABLE\n");
+        printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
     }
     deallocateMatrix(&(data.matrix));
 
@@ -250,18 +251,27 @@ void printVarArray(int *array) {
     }
 }
 
-bool solve(struct NoGoodData data,int var, int value){
+bool solve(struct NoGoodData data, int var, int value) {
 
-    assignValueToVar(&data ,var, value);
+    if (solutionFound && breakSearchAfterOne)
+        return true;
+    int* prevPartialAssignment = NULL;
+    int* prevNoOfVarPerNoGood = NULL;
+    int* prevLonelyVar = NULL;
+    int* noGoodStatus=NULL; //the first column of the matrix is the status of the clause
+    storePrevState(data,&prevPartialAssignment, &prevNoOfVarPerNoGood, &prevLonelyVar, &noGoodStatus);
+    assignValueToVar(&data, var, value);
     pureLiteralCheck(&data);
     learnClause();
-    if(unitPropagation(&data)==CONFLICT)
-		return false;
-    
+    if (unitPropagation(&data) == CONFLICT) {
+        revert(&data, &prevPartialAssignment, &prevNoOfVarPerNoGood, &prevLonelyVar, &noGoodStatus);
+        return false;
+    }
     if (data.currentNoGoods==0) {
         printf("SATISFIABLE\n");
         printf("Assignment:\n");
         printVarArray(data.partialAssignment);
+        solutionFound=true;
 		return true;
     }   
     
@@ -274,11 +284,16 @@ bool solve(struct NoGoodData data,int var, int value){
     }
 
     if (data.varsYetToBeAssigned==0) {
+        revert(&data, &prevPartialAssignment, &prevNoOfVarPerNoGood, &prevLonelyVar, &noGoodStatus);
 		return false;
     }
 
     int varToAssign = chooseVar(data.partialAssignment);
-    return solve(data,varToAssign, TRUE) || solve(data, varToAssign, FALSE);
+    if ((solve(data, varToAssign, TRUE) || solve(data, varToAssign, FALSE)) == false) {
+        revert(&data, &prevPartialAssignment, &prevNoOfVarPerNoGood, &prevLonelyVar, &noGoodStatus);
+		return false;
+    }
+    return true;
  }
 
 int unitPropagation(struct NoGoodData* data){
@@ -338,7 +353,10 @@ void assignValueToVar(struct NoGoodData* data, int varToAssign, int value) {
     data->varsYetToBeAssigned--;
     removeNoGoodSetsContaining(&(data->matrix), &(data->currentNoGoods),varToAssign, value == TRUE ? NEGATED_LIT : POSITIVE_LIT);
 }
-
+void unassignVar(struct NoGoodData* data, int varToUnassign) {
+	data->partialAssignment[varToUnassign] = UNASSIGNED;
+	data->varsYetToBeAssigned++;
+}
 void learnClause(){
     return;
     //TODO
@@ -347,9 +365,11 @@ int removeLiteralFromNoGoods(struct NoGoodData* data, int varIndex, int sign) {
 	//scan column (varIndex) of matrix
 	for (int i = 0; i < noNoGoods; i++) {
 		if (data->matrix[i][varIndex] == sign) {
-			//remove the literal
-			data->matrix[i][varIndex] = 0;
-			data->noOfVarPerNoGood[i]--;
+			
+			//data->matrix[i][varIndex] = 0; //not necessary
+            
+            //remove the literal
+            data->noOfVarPerNoGood[i]--;
 			if (data->noOfVarPerNoGood[i] == 0) {
 				return CONFLICT;
 			}
@@ -364,4 +384,32 @@ int sum(int *array) {
 		    sum += 1;
 	}
 	return sum;
+}
+void storePrevState(struct NoGoodData data, int** prevPartialAssignment, int** prevNoOfVarPerNoGood, int** prevLonelyVar, int** noGoodStatus) {
+    (*prevPartialAssignment)=(int*)calloc(noVars + 1, sizeof(int));
+    (*prevNoOfVarPerNoGood) = (int*)calloc(noNoGoods, sizeof(int));
+    (*prevLonelyVar) = (int*)calloc(noNoGoods, sizeof(int));
+    (*noGoodStatus) = (int*)calloc(noNoGoods, sizeof(int));
+    for (int i = 0; i < noVars + 1; i++) {
+		(*prevPartialAssignment)[i] = data.partialAssignment[i];
+	}
+    for (int i = 0; i < noNoGoods; i++) {
+        (*prevNoOfVarPerNoGood)[i] = data.noOfVarPerNoGood[i];
+        (*prevLonelyVar)[i] = data.lonelyVar[i];
+        (*noGoodStatus)[i] = data.matrix[i][0];
+    }
+}
+void revert(struct NoGoodData* data, int** prevPartialAssignment, int** prevNoOfVarPerNoGood, int** prevLonelyVar, int** noGoodStatus) {
+    for (int i = 0; i < noVars + 1; i++) {
+    	data->partialAssignment[i] = (*prevPartialAssignment)[i];
+    }
+    for (int i = 0; i < noNoGoods; i++) {
+		data->noOfVarPerNoGood[i] = (*prevNoOfVarPerNoGood)[i];
+		data->lonelyVar[i] = (*prevLonelyVar)[i];
+		data->matrix[i][0] = (*noGoodStatus)[i];
+	}
+    free(*prevPartialAssignment);
+    free(*prevNoOfVarPerNoGood);
+    free(*prevLonelyVar);
+    free(*noGoodStatus);
 }
