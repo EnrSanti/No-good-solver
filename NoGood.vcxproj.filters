@@ -19,4 +19,7 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="no_good_solver_CUDA.cu" />
+  </ItemGroup>
 </Project>
