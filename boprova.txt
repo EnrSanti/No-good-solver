@@ -1,8 +1,0 @@
-c 
-c start with comments
-c commment 2
-c
-p nogood 5 3
-1 -5 4 0
--1 5 3 4 0
--3 0

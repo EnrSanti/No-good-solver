@@ -67,7 +67,7 @@ int* varBothNegatedAndNot = NULL; //a int array that holds the status of the var
 bool breakSearchAfterOne = false; //if true, the search will stop after the first solution is found
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
-void main(int argc, char const* argv[]) {
+void mainCUDA(int argc, char const* argv[]) {
 
     //if the user didn't insert the file path or typed more
     if (argc != 2) {
