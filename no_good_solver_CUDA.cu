@@ -3,9 +3,6 @@
 #include <stdbool.h> 
 #include <stdlib.h>
 
-
-
-
 //for the clauses
 #define UNSATISFIED -2
 #define SATISFIED 2
@@ -49,9 +46,9 @@ void printMatrix(int**);
 void printVarArray(int*);
 void allocateMatrix(int***);
 void deallocateMatrix(int***);
-bool solve(struct NoGoodData, int, int);
-int unitPropagation(struct NoGoodData*);
-void pureLiteralCheck(struct NoGoodData*);
+bool __device__ solve(struct NoGoodData, int, int);
+int __global__ unitPropagation(struct NoGoodData*);
+void __global__ pureLiteralCheck(struct NoGoodData*);
 void removeNoGoodSetsContaining(int***, int*, int, int);
 int chooseVar(int*);
 void learnClause();
@@ -67,19 +64,23 @@ int* varBothNegatedAndNot = NULL; //a int array that holds the status of the var
 bool breakSearchAfterOne = false; //if true, the search will stop after the first solution is found
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
-void mainCUDA(int argc, char const* argv[]) {
+int** dev_matrix;
+
+void main(int argc, char const* argv[]) {
 
     //if the user didn't insert the file path or typed more
     if (argc != 2) {
         printError("Insert the file path");
         return;
     }
+    
     //argv[1] = "testsNG\\test_3.txt"; just for testing
 
     //create the strucure
     struct NoGoodData data;
     //we populate it with the data from the file
     readFile_allocateMatrix(argv[1], &data);
+    
     //print the matrix
     printMatrix(data.matrix);
     printf("\n");
@@ -108,6 +109,9 @@ void mainCUDA(int argc, char const* argv[]) {
 
     //we choose a variable and we start the search
     int varToAssign = chooseVar(data.partialAssignment);
+
+    //UP to here all serial
+
 
     if (solve(data, varToAssign, TRUE) || solve(data, varToAssign, FALSE)) {
         printf("\n\n\n**********SATISFIABLE**********\n\n\n");
@@ -247,8 +251,10 @@ void printMatrix(int** matrix) {
 //allocates the matrix
 void allocateMatrix(int*** matrix) {
     *matrix = (int**)calloc(noNoGoods, sizeof(int*));
+    cudaMalloc(&dev_matrix,noNoGoods*sizeof(int*))
     for (int i = 0; i < noNoGoods; i++) {
         (*matrix)[i] = (int*)calloc(noVars + 1, sizeof(int));
+    	cudaMalloc(&(dev_matrix[i]),(noVars + 1)*sizeof(int*))
     }
 
 }
