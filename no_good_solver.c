@@ -213,9 +213,10 @@ void popualteMatrix(FILE* ptr, struct NoGoodData* data){
                 varBothNegatedAndNot[literal * sign]=APPEARS_BOTH;
         }
     }
+    //we assign to true possible missing variables
     for(int i=1; i<noVars+1; i++){
         if(data->varsAppearingInRemainingNoGoods[i]==0){
-            data->partialAssignment[i]=1;
+            data->partialAssignment[i]=TRUE;
             data->varsYetToBeAssigned--;
         }
     }
