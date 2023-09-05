@@ -6,14 +6,14 @@
 import random
 from random import choice
 
-filesToCreate=10
+filesToCreate=30
 
 #how many clauses we want in an instance (max and min)
-minNoGoods=2000
-maxNoGoods=3000
+minNoGoods=10
+maxNoGoods=50
 
-minNoVars=700
-maxNoVars=800
+minNoVars=5
+maxNoVars=20
 
 
 #we set the seed so we always generate that instances
@@ -23,7 +23,8 @@ osType="linux"; # "windows" or "linux" #used just to specify the directory forma
 
 #the following function is taken from: https://www.w3resource.com/python-exercises/list/python-data-type-list-exercise-145.php
 def generate_random(from_,to_, alreadyInNoGood):
-    result = choice([i for i in range(from_,to_) if i not in alreadyInNoGood])
+    result = choice([i for i in range(from_,to_) if (i not in alreadyInNoGood)])
+    print(str(alreadyInNoGood)+"\n")
     return result
 
 def generateNoGood(novars,actualVars):
@@ -31,10 +32,12 @@ def generateNoGood(novars,actualVars):
 	alreadyInNoGood=[]
 	for varInRow in range(0,nogoodVars):	
 		#we want to have a variable or its negation
-		var=generate_random(1, novars,alreadyInNoGood)*random.choice([-1, 1])
+		var=generate_random(1, novars,alreadyInNoGood)
+		alreadyInNoGood.append(var)
+		var=var*random.choice([-1, 1])
 		f.write(str(var)+' ')
 		fSAT.write(str(-var)+' ')
-		alreadyInNoGood.append(var)
+		
 
 		if(var in actualVars):
 			actualVars.remove(var)
@@ -52,8 +55,8 @@ if(osType=="windows"):
 	directoryPathNG="testsNG\\"
 	directoryPathSAT="testsSAT\\"
 else:
-	directoryPathNG="testsNG/"
-	directoryPathSAT="testsSAT/"
+	directoryPathNG="testsNG_small/"
+	directoryPathSAT="testsSAT_small/"
 
 
 
