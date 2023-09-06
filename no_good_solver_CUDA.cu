@@ -54,10 +54,10 @@ void allocateMatrix();
 void deallocateMatrix();
 __global__ void pureLiteralCheck(int*, int *, int *);
 __global__ void removeNoGoodSetsContaining(int*, int*, int*,int *);
-//__global__ void unitPropagation(int* dev_matrix,int * dev_partialAssignment,int * dev_varBothNegatedAndNot, int * dev_noOfVarPerNoGood,int* dev_lonelyVar);
-//__device__ void removeLiteralFromNoGoods(int ,int**, int, int,int*,int*,int*, int*);
-
+__global__ void unitPropagation(int* ,int * ,int * , int * ,int* ,int *);
+int removeLiteralFromNoGoods(int**, int*,int*,int *,int, int);
 void printMatrix(int**);
+
 //algorithm data:
 
 int** matrix; //the matrix that holds the clauses
@@ -81,14 +81,18 @@ int* varBothNegatedAndNot = NULL; //a int array that holds the status of the var
 int* dev_varBothNegatedAndNot=NULL;
 bool breakSearchAfterOne = false; //if true, the search will stop after the first solution is found
 bool solutionFound = false; //if true, a solution was found, used to stop the search
+int conflict=NO_CONFLICT;
 
 //technical (GPU related) data:
 struct cudaDeviceProp deviceProperties; //on WINDOWS it seems we need to add the "Struct" 
-int noOfVarsPerThread = 4; //the number of variables that each thread will handle in unit propagation, so that each thread will deal with 32 byte of memory (1 mem. transfer)
-__device__ int dev_noOfVarsPerThread = 4;
+int noOfVarsPerThread = 2; //the number of variables that each thread will handle in unit propagation, so that each thread will deal with 32 byte of memory (1 mem. transfer)
+
+
+//device auxiliary variables
+__device__ int dev_noOfVarsPerThread =2;
 __device__ int dev_noNoGoodsperThread=2;
-__device__ int dev_conflict;
-int conflict=NO_CONFLICT;
+int* dev_conflict; //used to store whether the propagation caused a conflict
+int* dev_unitPropValuestoRemove; 
 
 int main(int argc, char const* argv[]) {
 
@@ -111,12 +115,7 @@ int main(int argc, char const* argv[]) {
 
     //we populate it with the data from the file
     readFile_allocateMatrix(argv[1], &data);
-    //printMatrix(matrix);
-    //now we have the matrix on the device,alongside dev_data and dev_noVars & dev_noNoGoods 
 
-    //allocate the partial assignment array
-  
-    //printMatrix(matrix);
 
     int blocksToLaunch = 1;// (int) noVars / (noOfVarsPerThread*128);
     //thus we launch the number of blocks needed, each thread will handle noOfVarsPerThread variables (128 threads per block, four warps)
@@ -125,29 +124,60 @@ int main(int argc, char const* argv[]) {
     pureLiteralCheck<<<blocksToLaunch,32>>>(dev_matrix,dev_partialAssignment, dev_varBothNegatedAndNot);
  	//ths for the noGoods
     removeNoGoodSetsContaining<<<blocksToLaunch,32>>>(dev_matrix,dev_partialAssignment, dev_varBothNegatedAndNot,dev_varBothNegatedAndNot);
-   
-    //cudaDeviceSynchronize(); su unico stream non  serve
-    conflict=NO_CONFLICT;
-	cudaError_t err=cudaMemcpyToSymbol(dev_conflict, &conflict, sizeof(int), 0, cudaMemcpyHostToDevice);
+   printMatrix(matrix);
 
-    //printf("cose%s\n",cudaGetErrorString(err) );
 
-	//copio la mat
-	for (int i = 0; i < noNoGoods; i++) {
+    /*del da qui
+
+    for (int i = 0; i < noNoGoods; i++) {
         cudaMemcpy(matrix[i], dev_matrix + i * ((noVars + 1)), (noVars + 1) * sizeof(int), cudaMemcpyDeviceToHost);
     }
+    //we copy noOfVarPerNoGood, lonelyVar e partialAssignment
+    cudaMemcpy(data.noOfVarPerNoGood, dev_noOfVarPerNoGood, (noNoGoods) * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(data.lonelyVar, dev_lonelyVar, (noNoGoods) * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(data.partialAssignment, dev_partialAssignment, (noVars+1) * sizeof(int), cudaMemcpyDeviceToHost);
+    printMatrix(matrix);
+
+    for(int i=1;i<noVars+1; i++){
+        printf("var: %d\n",data.partialAssignment[i]);
+    }
+    for(int i=0;i<noNoGoods; i++){
+        printf("noOfVarPerNoGood: %d, lonelyVar: %d\n",data.noOfVarPerNoGood[i],data.lonelyVar[i]);
+    }
+    a qui*/
+
+
+    //cudaDeviceSynchronize(); su unico stream non  serve
+    conflict=NO_CONFLICT;
+
+
+	
 	
 
 
-    //unitPropagation<<<blocksToLaunch,32>>>(dev_matrix,dev_partialAssignment, dev_varBothNegatedAndNot,dev_noOfVarPerNoGood, dev_lonelyVar); 
-    //if we find a conlfict at the top level, the problem is unsatisfiable
-    cudaDeviceSynchronize();
-    err=cudaMemcpyFromSymbol(&conflict, dev_conflict, sizeof(int), 0, cudaMemcpyDeviceToHost);
-	//printf("cose%s\n",cudaGetErrorString(err) );
-    cudaMemcpy((data.partialAssignment), dev_partialAssignment, (noVars + 1)*sizeof(int), cudaMemcpyDeviceToHost);
-	for(int i=1;i< noVars+1; i++){
-		printf("el: %d\n",(data.partialAssignment[i]) );
-	}
+    unitPropagation<<<blocksToLaunch,32>>>(dev_matrix,dev_partialAssignment, dev_varBothNegatedAndNot,dev_noOfVarPerNoGood, dev_lonelyVar,dev_unitPropValuestoRemove); 
+    removeNoGoodSetsContaining<<<blocksToLaunch,32>>>(dev_matrix,dev_partialAssignment, dev_varBothNegatedAndNot,dev_unitPropValuestoRemove);
+    
+
+    //copio la mat
+    for (int i = 0; i < noNoGoods; i++) {
+        cudaMemcpy(matrix[i], dev_matrix + i * ((noVars + 1)), (noVars + 1) * sizeof(int), cudaMemcpyDeviceToHost);
+    }
+    //we copy noOfVarPerNoGood, lonelyVar e partialAssignment
+    cudaMemcpy(data.noOfVarPerNoGood, dev_noOfVarPerNoGood, (noNoGoods) * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(data.lonelyVar, dev_lonelyVar, (noNoGoods) * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(data.partialAssignment, dev_partialAssignment, (noVars+1) * sizeof(int), cudaMemcpyDeviceToHost);
+    
+    
+
+    for(int i=0; i<noNoGoods; i++){
+        if (matrix[i][0] ==  UNSATISFIED &&  data.noOfVarPerNoGood[i] == 1) 
+            conflict=removeLiteralFromNoGoods(matrix,data.noOfVarPerNoGood,data.lonelyVar,data.partialAssignment,data.lonelyVar[i], data.partialAssignment[data.lonelyVar[i]] == TRUE ? POSITIVE_LIT : NEGATED_LIT);
+        //if we find a conlfict at the top level, the problem is unsatisfiable
+        if(conflict==CONFLICT)
+            break;
+    } 
+    printMatrix(matrix);
     if (conflict==CONFLICT) {
         printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
         //deallocateMatrix(&(data.matrix));
@@ -174,11 +204,7 @@ int main(int argc, char const* argv[]) {
     }
     */
   //  deallocateMatrix(&(data.matrix));
-    for (int i = 0; i < noNoGoods; i++) {
-        cudaMemcpy(matrix[i], dev_matrix + i * ((noVars + 1)), (noVars + 1) * sizeof(int), cudaMemcpyDeviceToHost);
-    }
 
-    printMatrix(matrix);
 
     return 1;
 }
@@ -263,8 +289,8 @@ void popualteMatrix(FILE* ptr, struct NoGoodDataC* data) {
     err=cudaMalloc((void**)&dev_noOfVarPerNoGood, noNoGoods* sizeof(int));
 	//printf("allocated dev_noOfVarPerNoGood %s\n",cudaGetErrorString(err) );
     err=cudaMalloc((void**)&dev_lonelyVar, noNoGoods * sizeof(int));
-
-	//printf("allocated dev_lonelyVar %s\n",cudaGetErrorString(err) );
+    err=cudaMalloc((void**)&dev_unitPropValuestoRemove, (noVars + 1) * sizeof(int));
+	printf("allocated dev_lonelyVar %s\n",cudaGetErrorString(err) );
 
 
     for (int i = 0; i < noVars + 1; i++) {
@@ -378,7 +404,7 @@ __global__ void  pureLiteralCheck(int* dev_matrix,int * dev_partialAssignment,in
 __global__ void removeNoGoodSetsContaining(int* matrix, int* currentNoGoods, int* dev_varBothNegatedAndNot,int* sing) {
 	
 	int thPos = blockIdx.x * blockDim.x + threadIdx.x;
-	//printf("th %d in, lookin' %d \n",thPos,*(*matrix+thPos));   
+  
 	//printf("th %d dev_noNoGoods %d \n",thPos,dev_noNoGoods);         
     //we scan each no_good (each th scans reading the first cell of matrix and the relative var pos)
     
@@ -387,10 +413,11 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* currentNoGoods, int
 	    if (i<dev_noNoGoods){
 	    	//fixed a no good (thread) we loop on the row of the matrix (in this way ONLY ONE thead access each cell of the first column)
 	    	for(int varIndex=1; varIndex<=dev_noVars; varIndex++){
-		    	if(*(matrix+i*(dev_noVars+1)+varIndex) == sing[varIndex] && (*matrix + i*(dev_noVars+1)) != SATISFIED) {
+
+		    	if(sing[varIndex] !=0 && *(matrix+i*(dev_noVars+1)+varIndex) == sing[varIndex] && (*matrix + i*(dev_noVars+1)) != SATISFIED) {
 			        //remove the nogood set
-			        printf("th. no %d changing  %d of clause to SAT \n",thPos,*(matrix + thPos*(dev_noVars+1)));
-			        *(matrix + i*(dev_noVars+1)) = SATISFIED; //VA FATTA ATOMIC
+			        
+                    *(matrix + i*(dev_noVars+1)) = SATISFIED; //VA FATTA ATOMIC
 			      
 			        //TODO substiture with one decrement at the end (e.g. warp level reduction)
 			       	decrease--;
@@ -420,67 +447,53 @@ void printMatrix(int** matrix) {
     }
     printf("\n");
 }
-/*
-__global__ void unitPropagation(int* dev_matrix,int * dev_partialAssignment,int * dev_varBothNegatedAndNot,int *dev_noOfVarPerNoGood,int* dev_lonelyVar) {
+
+__global__ void unitPropagation(int* dev_matrix,int * dev_partialAssignment,int * dev_varBothNegatedAndNot,int *dev_noOfVarPerNoGood,int* dev_lonelyVar, int* dev_unitPropValuestoRemove) {
     
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
-    int removeLiteralFromNoGoodsRETURN;
-
+    //int removeLiteralFromNoGoodsRETURN;
+    int i;
     //for each no good (th deals with ng)
-    for (int i = thPos*dev_noOfVarPerNoGood; i < thPos*dev_noOfVarPerNoGood + dev_noOfVarPerNoGood; i++) {
-
+    for (int c = 0; c < dev_noNoGoodsperThread; c++) {
+        i=thPos+32*c;
+        printf("UNIT PROP: th %d at no NOOD: %d\n",thPos,i);
     	//printf("th %d lookin at cell %d \n",thPos,i );
-    	if(dev_conflict!=NO_CONFLICT){
-    		printf("someone said conflict\n");
-    		if(threadIdx.x==0){
-    			printf("Hi, th 0 setting conflict\n");
-    			dev_conflict=CONFLICT;
-    		}
-    		__syncthreads();
-    		break;
-    	}
-    	if(i<=dev_noNoGoods && *(dev_matrix+i*(dev_noVars+1)) == UNSATISFIED && dev_noOfVarPerNoGood[i] == 1){
-            printf("th %d inside at no good: %d, seing: %d\n",thPos,i,*(dev_matrix+i*(dev_noVars+1)));
+    	if(i<dev_noNoGoods && *(dev_matrix+i*(dev_noVars+1)) == UNSATISFIED && dev_noOfVarPerNoGood[i] == 1){
+            printf("UNIT PROP: at no good: %d, seing: %d (-2 = UNSATISFIED)\n",i,*(dev_matrix+i*(dev_noVars+1)));
             //lonelyVar[i] is a column index
+
             dev_partialAssignment[dev_lonelyVar[i]] = *(dev_matrix+i*(dev_noVars+1)+dev_lonelyVar[i]) > 0 ? FALSE : TRUE;
             atomicAdd(&dev_varsYetToBeAssigned,-1);
+            dev_unitPropValuestoRemove[dev_lonelyVar[i]]=dev_partialAssignment[dev_lonelyVar[i]] == TRUE ? NEGATED_LIT : POSITIVE_LIT;
 
-            //we update the status of the no good
-            removeNoGoodSetsContaining(i,&(dev_matrix), &(dev_currentNoGoods), -(dev_partialAssignment[dev_lonelyVar[i]]));
-          
-            removeLiteralFromNoGoods(i,&(dev_matrix), dev_lonelyVar[i], dev_partialAssignment[dev_lonelyVar[i]],dev_noOfVarPerNoGood,dev_partialAssignment,dev_lonelyVar ,&removeLiteralFromNoGoodsRETURN);
-            if(removeLiteralFromNoGoodsRETURN==CONFLICT){
-            	atomicAdd(&dev_conflict,1);
-            	printf("FOUND, i's should be all equal to: %d",i);
-            }
         }
         __syncthreads();
 
     }
 
 }
-
-//a call deals with one no_good
-__device__ void removeLiteralFromNoGoods(int i,int** dev_matrix, int varIndex, int sign,int *dev_noOfVarPerNoGood,int* dev_partialAssignment,int* dev_lonelyVar, int* returnV) {
-    //scan column (varIndex) of matrix, we want to skip the first column, so i%(dev_noVars+1)!=0
-   if (*(*dev_matrix+i+varIndex) == sign) {
-        //remove the literal
-        atomicAdd((dev_noOfVarPerNoGood+i), -1);
-        if (dev_noOfVarPerNoGood[i] == 1) {
-            //search and assing the literal to the lonelyVar
-            for (int j = 1; j < dev_noVars + 1; j++) {
-            	//fix if first condition
-                if (*(*dev_matrix+i+j) != NO_LIT && dev_partialAssignment[j] == UNASSIGNED) {
-                    dev_lonelyVar[i] = j;
+//removes the literal varIndex from the nogood if the sign is the one indicated
+int removeLiteralFromNoGoods(int** matrix, int* noOfVarPerNoGood,int* lonelyVar,int *partialAssignment,int varIndex, int sign) {
+    //scan column (varIndex) of matrix
+    for (int i = 0; i < noNoGoods; i++) {
+        if (matrix[i][varIndex] == sign) {
+            
+            //data->matrix[i][varIndex] = 0; //not necessary WE NEVER MODIFY MATRIX (except for the first col)
+            
+            //remove the literal
+            noOfVarPerNoGood[i]--;
+            if(noOfVarPerNoGood[i]==1){
+                //search and assing the literal to the lonelyVar
+                for (int j = 1; j < noVars + 1; j++) {
+                    if (matrix[i][j] != NO_LIT && partialAssignment[j]==UNASSIGNED) {
+                        lonelyVar[i] = j;
+                    }
                 }
-                __syncthreads();
             }
-        }        
+            if (noOfVarPerNoGood[i] == 0) {
+                return CONFLICT;
+            }
+        }
     }
-    __syncthreads();
-    if(dev_noOfVarPerNoGood[i] == 0) 
-        *(returnV) = CONFLICT;
-    else
-    //dev_noOfVarPerNoGood[i]-3 //se era 0 ritorno conflict
-    	*(returnV) = NO_CONFLICT;
-}*/
+    return NO_CONFLICT;
+}
