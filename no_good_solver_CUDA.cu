@@ -157,21 +157,13 @@ int main(int argc, char const* argv[]) {
     cudaError_t err=cudaMemcpyFromSymbol(&conflict,dev_conflict, sizeof(int));
     //printf("copy conflict%s\n",cudaGetErrorString(err) );
     err=cudaMemcpy(&(data.currentNoGoods),dev_data_dynamic.dev_varsYetToBeAssigned_dev_currentNoGoods, sizeof(int),cudaMemcpyDeviceToHost);
-    printf("vedi se errore: %s\n",cudaGetErrorString(err) );
    
     err=cudaMemcpy(&(data.varsYetToBeAssigned),(dev_data_dynamic.dev_varsYetToBeAssigned_dev_currentNoGoods+1), sizeof(int),cudaMemcpyDeviceToHost);
-    printf("vedi se errore: %s\n",cudaGetErrorString(err) );
-   
+
     cudaMemcpy(data.partialAssignment, dev_data_dynamic.dev_partialAssignment, (noVars+1) * sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(data.matrix_noGoodsStatus, dev_data_dynamic.dev_matrix_noGoodsStatus, (noNoGoods) * sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(data.varsAppearingInRemainingNoGoods,dev_data_dynamic.dev_varsAppearingInRemainingNoGoods, (noVars + 1) * sizeof(int),cudaMemcpyDeviceToHost);
 
-    for(int i=0; i<noNoGoods; i++){
-        if (data.matrix_noGoodsStatus[i] == UNSATISFIED)
-            printf("UNSATISFIED \n");
-        else
-            printf("SATISFIED   \n");
-    } 
 
     if (conflict==CONFLICT) {
         printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
@@ -186,15 +178,6 @@ int main(int argc, char const* argv[]) {
         return 0;
     }
 
-    for(int i=1; i<noVars+1; i++){
-        printf("%d, ",data.partialAssignment[i]);   
-    }
-
-        printf("\n ");
-    for(int i=1; i<noVars+1; i++){
-        
-        printf("%d, ",data.varsAppearingInRemainingNoGoods[i]);
-    }
     //we choose a variable and we start the search
     int varToAssign = chooseVar(data.partialAssignment,data.varsAppearingInRemainingNoGoods);
 
@@ -266,14 +249,9 @@ void readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data,s
     data->currentNoGoods = noNoGoods;
     data->varsYetToBeAssigned = noVars;
 
-    err=cudaMalloc((void**)&(dev_data_dynamic->dev_varsYetToBeAssigned_dev_currentNoGoods), 2 * sizeof(int));   
-    printf("VEDI SE DA ERRORE%s\n",cudaGetErrorString(err) );
-
-    err=cudaMemcpy((dev_data_dynamic->dev_varsYetToBeAssigned_dev_currentNoGoods), &noNoGoods, sizeof(int), cudaMemcpyHostToDevice);
-    printf("VEDI SE DA ERRORE%s\n",cudaGetErrorString(err) );
-   
+    err=cudaMalloc((void**)&(dev_data_dynamic->dev_varsYetToBeAssigned_dev_currentNoGoods), 2 * sizeof(int));  
+    err=cudaMemcpy((dev_data_dynamic->dev_varsYetToBeAssigned_dev_currentNoGoods), &noNoGoods, sizeof(int), cudaMemcpyHostToDevice);    
     err=cudaMemcpy((dev_data_dynamic->dev_varsYetToBeAssigned_dev_currentNoGoods+1), &noVars, sizeof(int), cudaMemcpyHostToDevice);
-    printf("VEDI SE DA ERRORE%s\n",cudaGetErrorString(err) );
    
     err=cudaMemcpyToSymbol(dev_conflict, &conflict, sizeof(int), 0, cudaMemcpyHostToDevice);
     popualteMatrix(ptr, data,dev_data_dynamic);
@@ -438,7 +416,7 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* dev_varBothNegatedA
 
 		    	if(sing[varIndex] !=0 && *(matrix+i*(dev_noVars+1)+varIndex) == sing[varIndex] && *(matrix + i*(dev_noVars+1)) !=SATISFIED) {
 			        //remove the nogood set
-			        printf("Th. %d, accessing no good:%d, SAT value: %d\n",thPos,i,*(matrix + i*(dev_noVars+1)));
+			       
                     *(matrix + i*(dev_noVars+1)) = SATISFIED; //è atomic 
 			        dev_matrix_noGoodsStatus[i]=SATISFIED;
 			        //TODO substiture with one decrement at the end (e.g. warp level reduction)
@@ -529,7 +507,7 @@ int chooseVar(int *partialAssignment, int* varsAppearingInRemainingNoGoods) {
 }
 
 bool solve(struct NoGoodDataCUDA_devDynamic dev_data,struct NoGoodDataCUDA_host data, int var, int value) {
-    
+    printf("in solve\n");
     //if we want to stop after the first solution and it's already found
     if (solutionFound && breakSearchAfterOne)
         return true;
@@ -550,20 +528,15 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data,struct NoGoodDataCUDA_host 
     //può essere fatto con un kernel
     
     cudaError_t err=cudaMemcpy((dev_data.dev_partialAssignment+var),&value,sizeof(int),cudaMemcpyHostToDevice);
-    printf("copying in assignValueToVar: %s\n",cudaGetErrorString(err));
-    
     err=cudaMemcpy(&(data.varsYetToBeAssigned),&(dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods[0]), sizeof(int),cudaMemcpyDeviceToHost);
-    printf("copying in varsYetToBeAssigned: %s\n",cudaGetErrorString(err));
     data.varsYetToBeAssigned--;
     err=cudaMemcpy(&(dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods[0]),&(data.varsYetToBeAssigned), sizeof(int),cudaMemcpyHostToDevice);
-    printf("copying in: %s\n",cudaGetErrorString(err));
-
+  
 
     int* signs=(int*)calloc(noVars + 1, sizeof(int));
     signs[var]= (value == TRUE ? NEGATED_LIT : POSITIVE_LIT);
     int* dev_signs;
     err=cudaMalloc((void **)&dev_signs, (noVars + 1)* sizeof(int));
-    printf("vedi: %s\n",cudaGetErrorString(err));
     removeNoGoodSetsContaining<<<blocksToLaunch_NG, threadsPerBlock>>>(dev_matrix, dev_varBothNegatedAndNot,dev_signs,dev_data.dev_matrix_noGoodsStatus,(dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods+1));
     cudaDeviceSynchronize();
     //end of former assignValueToVar
@@ -590,15 +563,14 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data,struct NoGoodDataCUDA_host 
 
      //to check whether a conflict occurred we get the data:
     err=cudaMemcpyFromSymbol(&conflict,dev_conflict, sizeof(int));
-    printf("vedi: %s\n",cudaGetErrorString(err));
-    
 
     if (conflict == CONFLICT) {
+        printf("CONFLICT, backtrack\n");
         revert(&dev_data, &dev_prevPartialAssignment, &dev_prevNoOfVarPerNoGood, &dev_prevLonelyVar, &dev_matrix_prevNoGoodsStatus,&dev_prevVarsAppearingInRemainingNoGoods,&dev_prevVarsYetToBeAssigned_prevCurrentNoGoods);
         return false;
     }
+
     err=cudaMemcpy(&(data.currentNoGoods),dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, sizeof(int),cudaMemcpyDeviceToHost);
-    printf("vedi se errore: %s\n",cudaGetErrorString(err) );
 
     //if the partialAssignment satisfies (falsifies) all the clauses we have found a solution
     if(data.currentNoGoods == 0) {
@@ -611,10 +583,11 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data,struct NoGoodDataCUDA_host 
 
 
     err=cudaMemcpy(&(data.varsYetToBeAssigned),&(dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods[0]), sizeof(int),cudaMemcpyDeviceToHost);
-    printf("copying in varsYetToBeAssigned: %s\n",cudaGetErrorString(err));
-  
+
     //if there are no more variables to assign (AND having previously checked that not all the no good are sat) we backtrack
     if (data.varsYetToBeAssigned==0) {
+
+        printf("varsYetToBeAssigned==0, backtrack\n");
         revert(&dev_data, &dev_prevPartialAssignment, &dev_prevNoOfVarPerNoGood, &dev_prevLonelyVar, &dev_matrix_prevNoGoodsStatus,&dev_prevVarsAppearingInRemainingNoGoods,&dev_prevVarsYetToBeAssigned_prevCurrentNoGoods);
         return false;
     }
@@ -627,6 +600,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data,struct NoGoodDataCUDA_host 
     
     //the check is done just for reverting purposes in case we need to backtrack
     if ((solve(dev_data,data, varToAssign, TRUE) || solve(dev_data,data, varToAssign, FALSE)) == false) {
+        printf("or backtrack\n");
         revert(&dev_data, &dev_prevPartialAssignment, &dev_prevNoOfVarPerNoGood, &dev_prevLonelyVar, &dev_matrix_prevNoGoodsStatus,&dev_prevVarsAppearingInRemainingNoGoods,&dev_prevVarsYetToBeAssigned_prevCurrentNoGoods);
         return false;
     }
@@ -691,68 +665,31 @@ void freeCUDA(){
 void storePrevStateOnDevice(struct NoGoodDataCUDA_devDynamic dev_data, int** dev_prevPartialAssignment, int** dev_prevNoOfVarPerNoGood, int** dev_prevLonelyVar, int** dev_noGoodStatus, int** dev_prevVarsAppearingInRemainingNoGoods, int** dev_prevVarsYetToBeAssigned_prevCurrentNoGoods) {
     //we allocate the space on the global memory for the following arrays:
     cudaError_t err=cudaMalloc((void **)dev_prevPartialAssignment, (noVars + 1) * sizeof(int));
-    printf("allocated varBothNegatedAndNot: %s\n",cudaGetErrorString(err));
-
     err=cudaMalloc((void **)dev_prevNoOfVarPerNoGood, noNoGoods* sizeof(int));
-    printf("allocated dev_prevNoOfVarPerNoGood: %s\n",cudaGetErrorString(err));
-    
     err=cudaMalloc((void **)dev_prevLonelyVar,noNoGoods * sizeof(int));
-    printf("allocated varBothNegatedAndNot: %s\n",cudaGetErrorString(err) );
-
     err=cudaMalloc((void **)dev_noGoodStatus, noNoGoods * sizeof(int));
-    printf("allocated dev_noGoodStatus: %s\n",cudaGetErrorString(err) );
-
     err=cudaMalloc((void **)dev_prevVarsAppearingInRemainingNoGoods, (noVars + 1) * sizeof(int));
-    printf("allocated dev_prevVarsAppearingInRemainingNoGoods: %s\n",cudaGetErrorString(err) );
-
     //we also copy the two (global) variables in a [2] array, we can't declare a device var locally ( we could use a kernel 1x1, maybe it would be faster (TODO))
     err=cudaMalloc((void **)&dev_prevVarsYetToBeAssigned_prevCurrentNoGoods, 2 * sizeof(int));
-    printf("copying in dev_prevVarsYetToBeAssigned_prevCurrentNoGoods: %s\n",cudaGetErrorString(err));
-    
-
-
+  
     //we copy the contents
     //according to: https://stackoverflow.com/questions/6063619/cuda-device-to-device-transfer-expensive to optimize the copy we could make another kernel
     err=cudaMemcpy((*dev_prevPartialAssignment), dev_data.dev_partialAssignment,sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy((*dev_prevNoOfVarPerNoGood), dev_data.dev_noOfVarPerNoGood,sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy((*dev_prevLonelyVar), dev_data.dev_lonelyVar,sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy((*dev_noGoodStatus), dev_data.dev_matrix_noGoodsStatus,sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy((*dev_prevVarsAppearingInRemainingNoGoods), dev_data.dev_varsAppearingInRemainingNoGoods,sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy(dev_prevVarsYetToBeAssigned_prevCurrentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods) ,sizeof(int)*2, cudaMemcpyDeviceToDevice);
-    printf("copying in dev_prevVarsYetToBeAssigned_prevCurrentNoGoods: %s\n",cudaGetErrorString(err));
-
 }
 
 //performs a copy of the arrays passed (to revert to the previous state) then it deallocates the memory
 void revert(struct NoGoodDataCUDA_devDynamic* dev_data, int** dev_prevPartialAssignment, int** dev_prevNoOfVarPerNoGood, int** dev_prevLonelyVar, int** dev_noGoodStatus, int** dev_prevVarsAppearingInRemainingNoGoods,int ** dev_prevVarsYetToBeAssigned_prevCurrentNoGoods) {
     cudaError_t err=cudaMemcpy((dev_data->dev_partialAssignment),(*dev_prevPartialAssignment),sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy((dev_data->dev_noOfVarPerNoGood),(*dev_prevNoOfVarPerNoGood),sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy((dev_data->dev_lonelyVar),(*dev_prevLonelyVar),sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy((dev_data->dev_matrix_noGoodsStatus),(*dev_noGoodStatus),sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy((dev_data->dev_varsAppearingInRemainingNoGoods),(*dev_prevVarsAppearingInRemainingNoGoods),sizeof(int)*(noVars + 1) , cudaMemcpyDeviceToDevice);
-    printf("copying: %s\n",cudaGetErrorString(err));
-
     err=cudaMemcpy((dev_data->dev_varsYetToBeAssigned_dev_currentNoGoods),(*dev_prevVarsYetToBeAssigned_prevCurrentNoGoods),sizeof(int)*2, cudaMemcpyDeviceToDevice);
-    printf("VEDIIIIIIIIIIIII: %s\n",cudaGetErrorString(err));
-    
     cudaFree(*dev_prevPartialAssignment);
     cudaFree(*dev_prevNoOfVarPerNoGood);
     cudaFree(*dev_prevLonelyVar);
