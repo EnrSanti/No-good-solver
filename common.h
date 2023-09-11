@@ -59,6 +59,8 @@ struct NoGoodDataCUDA_devDynamic {
     int* dev_lonelyVar; //a int array that holds if noOfVarPerNoGood[i]==1 the index of the only variable in the clause  
     int* dev_varsAppearingInRemainingNoGoods;
     int* dev_matrix_noGoodsStatus; //the status of each clause (satisfied/unsatisfied) (used to avoid copying the whole matrix from device to host)
+    //a piece of the former "NoGoodData", it contains two integer varaiables allocated on the device 
+    int* dev_varsYetToBeAssigned_dev_currentNoGoods; //the number of variables that are not yet assigned and the number of non satisfied clauses (yet) 
 };
 /* APPARENTLY DIDN't WORK
 //the following struct contains the data (static) for the device, the struct has to be declared __device__
