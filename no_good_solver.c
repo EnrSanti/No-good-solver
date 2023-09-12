@@ -37,7 +37,7 @@ void main2(int argc, char const *argv[]){
         printError("Insert the file path");
         return;
     }
-    
+    argv[1] = "testsNG_small\\test_1.txt";
     //create the strucure
     struct NoGoodData data;
     //we populate it with the data from the file
@@ -240,6 +240,7 @@ void printVarArray(int *array) {
 //the main method responsible for calling unitpropagation, pureLiteralCheck and assignValueToVar
 //performs the search by recursively calling itself twice (once for each value of the variable)
 bool solve(struct NoGoodData data, int var, int value) {
+    printf("solve:) current ng %d, current varsYetToBeAssigned %d\n", data.currentNoGoods, data.varsYetToBeAssigned);
 
     //if we want to stop after the first solution and it's already found
     if (solutionFound && breakSearchAfterOne)
