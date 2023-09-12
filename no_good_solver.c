@@ -30,14 +30,14 @@ bool breakSearchAfterOne=false; //if true, the search will stop after the first 
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 
-void main22(int argc, char const *argv[]){
+void main(int argc, char const *argv[]){
     
     //if the user didn't insert the file path or typed more
     if(argc!=2){
         printError("Insert the file path");
         return;
     }
-    argv[1] = "testsNG_small\\test_1.txt";
+    argv[1] = "testsNG_small\\test_20.txt";
     //create the strucure
     struct NoGoodData data;
     //we populate it with the data from the file
