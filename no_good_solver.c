@@ -30,7 +30,7 @@ bool breakSearchAfterOne=false; //if true, the search will stop after the first 
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 
-void main2(int argc, char const *argv[]){
+void main22(int argc, char const *argv[]){
     
     //if the user didn't insert the file path or typed more
     if(argc!=2){
@@ -51,14 +51,74 @@ void main2(int argc, char const *argv[]){
 
 
     pureLiteralCheck(&data);
-    
+
+
+
+
+
+
+
+
+
+
+
+    printf("current no goods: %d, current vars yet: %d\n", data.currentNoGoods, data.varsYetToBeAssigned);
+    for (int i = 1; i < noVars + 1; i++) {
+        printf("var %d sign: %d \n", i, data.partialAssignment[i]);
+    }
+    for(int i=0; i<noNoGoods; i++){
+		printf("%d\n",data.matrix[i][0]);
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     //if we find a conlfict at the top level, the problem is unsatisfiable
     if (unitPropagation(&data) == CONFLICT) {
         printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
         deallocateMatrix(&(data.matrix));
         return;
     }
-    
+
+
+
+
+
+
+
+
+    printf("current no goods: %d, current vars yet: %d\n", data.currentNoGoods, data.varsYetToBeAssigned);
+    for (int i = 1; i < noVars + 1; i++) {
+        printf("var %d sign: %d \n", i, data.partialAssignment[i]);
+    }
+    for (int i = 0; i < noNoGoods; i++) {
+        printf("%d\n", data.matrix[i][0]);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     //if we somehow already have an assignment, we can skip the search
     if(data.currentNoGoods == 0) {
         printf("\n\n\n**********SATISFIABLE**********\n\n\n");
@@ -67,7 +127,10 @@ void main2(int argc, char const *argv[]){
         deallocateMatrix(&(data.matrix));
         return;
     }
-    
+    printf("current no goods: %d, current vars yet: %d\n", data.currentNoGoods, data.varsYetToBeAssigned);
+    for (int i = 0; i < noVars + 1; i++) {
+        printf("var %d sign: %d \n", i, data.partialAssignment[i]);
+    }
     //we choose a variable and we start the search
     int varToAssign = chooseVar(data.partialAssignment,data.varsAppearingInRemainingNoGoods);
 
