@@ -81,7 +81,7 @@ bool breakSearchAfterOne = false; //if true, the search will stop after the firs
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 
-int mai22n(int argc, char const* argv[]) {
+int main(int argc, char const* argv[]) {
 
     //create the strucure both on the device (without a struct) and on the host
     struct NoGoodDataCUDA_host data;
@@ -186,12 +186,39 @@ int mai22n(int argc, char const* argv[]) {
     err = cudaMemcpy((data.unitPropValuestoRemove), (dev_data_dynamic.dev_unitPropValuestoRemove), sizeof(int) * (noVars + 1), cudaMemcpyDeviceToHost);
 
     
-    
-    
-    
-    
+    unitPropagation2(&data);
+    cudaMemcpy((dev_data_dynamic.dev_lonelyVar), (data.lonelyVar), sizeof(int) * noNoGoods, cudaMemcpyHostToDevice);
+    err = cudaMemcpy((dev_data_dynamic.dev_matrix_noGoodsStatus), (data.matrix_noGoodsStatus), sizeof(int) * noNoGoods, cudaMemcpyHostToDevice);
+    err = cudaMemcpy((dev_data_dynamic.dev_noOfVarPerNoGood), (data.noOfVarPerNoGood), sizeof(int) * noNoGoods, cudaMemcpyHostToDevice);
+    err = cudaMemcpy((dev_data_dynamic.dev_varsYetToBeAssigned_dev_currentNoGoods), &(data.varsYetToBeAssigned), sizeof(int), cudaMemcpyHostToDevice);
+
+    err = cudaMemcpy((dev_data_dynamic.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), &(data.currentNoGoods), sizeof(int), cudaMemcpyHostToDevice);
+    err = cudaMemcpy((dev_data_dynamic.dev_varsAppearingInRemainingNoGoods), (data.varsAppearingInRemainingNoGoods), sizeof(int) * (noVars + 1), cudaMemcpyHostToDevice);
+    err = cudaMemcpy((dev_data_dynamic.dev_unitPropValuestoRemove), &(data.unitPropValuestoRemove), sizeof(int) * (noVars + 1), cudaMemcpyHostToDevice);
+    for (int i = 1; i < (noVars + 1); i++) {
+        printf("%d \n", data.unitPropValuestoRemove[i]);
+    }
+    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock >> > (dev_matrix, dev_varBothNegatedAndNot, dev_data_dynamic.dev_unitPropValuestoRemove, dev_data_dynamic.dev_matrix_noGoodsStatus, (dev_data_dynamic.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
+    cudaDeviceSynchronize();
+    //here threads deal with noGoods
+    removeLiteralFromNoGoods <<<blocksToLaunch_NG, threadsPerBlock >> > (dev_matrix, dev_data_dynamic.dev_noOfVarPerNoGood, dev_data_dynamic.dev_lonelyVar, dev_data_dynamic.dev_partialAssignment, dev_data_dynamic.dev_unitPropValuestoRemove);
+    cudaDeviceSynchronize();
+
+    err = cudaMemcpy((data.lonelyVar), (dev_data_dynamic.dev_lonelyVar), sizeof(int) * noNoGoods, cudaMemcpyDeviceToHost);
+    err = cudaMemcpy((data.matrix_noGoodsStatus), (dev_data_dynamic.dev_matrix_noGoodsStatus), sizeof(int) * noNoGoods, cudaMemcpyDeviceToHost);
+    err = cudaMemcpy((data.noOfVarPerNoGood), (dev_data_dynamic.dev_noOfVarPerNoGood), sizeof(int) * noNoGoods, cudaMemcpyDeviceToHost);
+    err = cudaMemcpy(&(data.varsYetToBeAssigned), (dev_data_dynamic.dev_varsYetToBeAssigned_dev_currentNoGoods), sizeof(int), cudaMemcpyDeviceToHost);
+    err = cudaMemcpy((data.partialAssignment), (dev_data_dynamic.dev_partialAssignment), sizeof(int) * (noVars + 1), cudaMemcpyDeviceToHost);
+
+    err = cudaMemcpy(&(data.currentNoGoods), (dev_data_dynamic.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), sizeof(int), cudaMemcpyDeviceToHost);
+    err = cudaMemcpy((data.varsAppearingInRemainingNoGoods), (dev_data_dynamic.dev_varsAppearingInRemainingNoGoods), sizeof(int) * (noVars + 1), cudaMemcpyDeviceToHost);
+    err = cudaMemcpy((data.unitPropValuestoRemove), (dev_data_dynamic.dev_unitPropValuestoRemove), sizeof(int) * (noVars + 1), cudaMemcpyDeviceToHost);
+
+    err = cudaMemcpyFromSymbol(& (conflict), (dev_conflict),sizeof(int),0, cudaMemcpyDeviceToHost);
+
+
     //if we find a conlfict at the top level, the problem is unsatisfiable
-    if (unitPropagation(&data) == CONFLICT) {
+    if (conflict == CONFLICT) {
         printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
         deallocateMatrix();
         return 2;
@@ -472,7 +499,7 @@ void unitPropagation2(struct NoGoodDataCUDA_host* data) {
     //for each no good
     for (int i = 0; i < noNoGoods; i++) {
         //if the no good is not satisfied and it has only one variable to assign we assign it
-        if (data->matrix_noGoodsStatus[i] == UNSATISFIED && data->noOfVarPerNoGood[i] == 1 && data->partialAssignment[i] == UNASSIGNED) {
+        if (data->matrix_noGoodsStatus[i] == UNSATISFIED && data->noOfVarPerNoGood[i] == 1 /*&& data->partialAssignment[i] == UNASSIGNED*/) {
             //lonelyVar[i] is a column index
             data->partialAssignment[data->lonelyVar[i]] = matrix[i][data->lonelyVar[i]] > 0 ? FALSE : TRUE;
             data->varsYetToBeAssigned--;
