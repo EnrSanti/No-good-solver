@@ -1,0 +1,11 @@
+c test automatically generated
+c
+c
+p nogood 5 7
+3 -4 -1 0
+3 1 0
+4 2 -3 0
+3 1 -2 0
+3 0
+-4 -3 0
+5 0
