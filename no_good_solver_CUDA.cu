@@ -86,7 +86,7 @@ int main(int argc, char const* argv[]) {
         //printError("Insert the file path");
         return -2;
     }
-    //argv[1] = "testVsmallNG\\test_5.txt"; just for testing
+    //argv[1] = "testsNG_small\\test_10.txt"; //just for testing
     
     //we get the properties of the GPU
     cudaGetDeviceProperties(&deviceProperties, 0);
@@ -179,7 +179,7 @@ int main(int argc, char const* argv[]) {
     if (unitPropagation2(&data) == CONFLICT) {
         printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
         //we free the cuda side
-        deallocateCUDA(dev_data_dynamic);
+        deallocateCUDA(&dev_data_dynamic);
         //the matrix (& vectors) on the host isn't needed anymore
         deallocateHost(&data);
         return 1;
@@ -219,7 +219,7 @@ int main(int argc, char const* argv[]) {
     if (data.currentNoGoods == 0) {
         printf("\n\n\n**********SATISFIABLE**********\n\n\n");
        	//we free the cuda side
-        deallocateCUDA(&data_data_devdev);
+        deallocateCUDA(&dev_data_dynamic);
         //the matrix (& vectors) on the host isn't needed anymore
         deallocateHost(&data);
 
