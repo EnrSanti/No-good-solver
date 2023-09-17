@@ -1,8 +1,0 @@
-c test automatically generated
-c
-c
-p nogood 2 4
--1 -2 0
--1 2 0
--2 1 0
-2 1 0
