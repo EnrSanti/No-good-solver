@@ -64,6 +64,12 @@ struct NoGoodDataCUDA_devDynamic {
     //a piece of the former "NoGoodData", it contains two integer varaiables allocated on the device 
     int* dev_varsYetToBeAssigned_dev_currentNoGoods; //the number of variables that are not yet assigned and the number of non satisfied clauses (yet) 
 };
+
+
+
+
+
+
 /* APPARENTLY DIDN't WORK
 //the following struct contains the data (static) for the device, the struct has to be declared __device__
 __device__ struct NoGoodDataCUDA_devStatic {
