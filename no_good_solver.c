@@ -30,14 +30,13 @@ bool breakSearchAfterOne=false; //if true, the search will stop after the first 
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 
-void main2(int argc, char const *argv[]){
+void main(int argc, char const *argv[]){
     
     //if the user didn't insert the file path or typed more
     if(argc!=2){
         printError("Insert the file path");
         return;
     }
-    argv[1] = "testsNG_small\\test_20.txt";
     //create the strucure
     struct NoGoodData data;
     //we populate it with the data from the file
@@ -59,10 +58,7 @@ void main2(int argc, char const *argv[]){
         deallocateMatrix(&(data.matrix));
         return;
     }
-    printf("current no goods: %d, current vars yet: %d\n", data.currentNoGoods, data.varsYetToBeAssigned);
-    for (int i = 0; i < noVars + 1; i++) {
-        printf("var %d sign: %d \n", i, data.partialAssignment[i]);
-    }
+
     //we choose a variable and we start the search
     int varToAssign = chooseVar(data.partialAssignment,data.varsAppearingInRemainingNoGoods);
 
@@ -235,7 +231,6 @@ void printVarArray(int *array) {
 //the main method responsible for calling unitpropagation, pureLiteralCheck and assignValueToVar
 //performs the search by recursively calling itself twice (once for each value of the variable)
 bool solve(struct NoGoodData data, int var, int value) {
-    printf("solve:) current ng %d, current varsYetToBeAssigned %d\n", data.currentNoGoods, data.varsYetToBeAssigned);
 
     //if we want to stop after the first solution and it's already found
     if (solutionFound && breakSearchAfterOne)
