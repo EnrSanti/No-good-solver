@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "common.h"
-
+#include <cuda_profiler_api.h>
 //apparently this is needed for cuda ON WINDOWS
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -149,7 +149,7 @@ int main(int argc, char const* argv[]) {
     //**********************
     //USEFUL CODE STARTS HERE:
     //**********************
-
+	cudaProfilerStart();
     //we launch the kernel that will handle the pure literals
     //here threads deal with vars
     err = cudaMemcpy((dev_data.dev_lonelyVar), (data.lonelyVar), sizeof(int) * noNoGoods, cudaMemcpyHostToDevice);
@@ -164,12 +164,13 @@ int main(int argc, char const* argv[]) {
 
 
     //pure literal check
-    pureLiteralCheck << <blocksToLaunch_VARS, threadsPerBlock >> > (dev_matrix, (dev_data.dev_partialAssignment), (dev_varBothNegatedAndNot), (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), SM_dev_varsYetToBeAssigned);
+    pureLiteralCheck << <blocksToLaunch_VARS, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, (dev_data.dev_partialAssignment), (dev_varBothNegatedAndNot), (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), SM_dev_varsYetToBeAssigned);
+    //we launch just the threads we need, it may not fill a multiple of a warp
     parallelSum << <1, blocksToLaunch_VARS, blocksToLaunch_VARS * sizeof(int) >> > (SM_dev_varsYetToBeAssigned,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods);
 
 
     //here threads deal with noGoods
-    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock >> > (dev_matrix, dev_varBothNegatedAndNot, dev_varBothNegatedAndNot, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, 1);
+    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, dev_varBothNegatedAndNot, dev_varBothNegatedAndNot, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, 1);
     parallelSum <<<1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods+1));
 
   	//we copy only the data that has been (possibly) modified
@@ -192,7 +193,7 @@ int main(int argc, char const* argv[]) {
     err = cudaMemcpy((dev_data.dev_unitPropValuestoRemove), (data.unitPropValuestoRemove), sizeof(int) * (noVars + 1), cudaMemcpyHostToDevice);
 
 
-    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock >> > (dev_matrix, dev_varBothNegatedAndNot, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, -1);
+    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, dev_varBothNegatedAndNot, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, -1);
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
 
     //here threads deal with noGoods
@@ -247,7 +248,7 @@ int main(int argc, char const* argv[]) {
     //calculate and print the time elapsed
     t = clock() - t;
     double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
-
+    cudaProfilerStop();
     printf("\n\n took %f seconds to execute \n", time_taken);
     return 0;
 }
@@ -446,7 +447,7 @@ void deallocateHost(struct NoGoodDataCUDA_host* data) {
 __global__ void  pureLiteralCheck(int* dev_matrix, int* dev_partialAssignment, int* dev_varBothNegatedAndNot, int* dev_varsYetToBeAssigned, int* SM_dev_varsYetToBeAssigned) {
 
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
-    __shared__ int decrease[128];
+    extern __shared__ int decrease[];
     //block resets the counter
     __shared__ int valToDecrement;
     //the first thread of each block resets the counter for the block
@@ -469,7 +470,7 @@ __global__ void  pureLiteralCheck(int* dev_matrix, int* dev_partialAssignment, i
     if (decrease[threadIdx.x] != 0) {
         atomicAdd(&(valToDecrement), decrease[threadIdx.x]);
     }
-    //non funzioner‡ con + blocchi
+    //non funzioner√† con + blocchi
     __syncthreads();
     //the first thread of each block decreases the value
     if (threadIdx.x == 0) {
@@ -486,7 +487,7 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* dev_varBothNegatedA
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
     //printf("th %d dev_noNoGoods %d \n",thPos,dev_noNoGoods);
 
-    __shared__ int decrease[128];
+    extern __shared__ int decrease[];
     //block resets the counter
     __shared__ int valToDecrement;
     //the first thread of each block resets the counter for the block
@@ -515,7 +516,7 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* dev_varBothNegatedA
     if (decrease[threadIdx.x] != 0) {
         atomicAdd(&(valToDecrement), decrease[threadIdx.x]);
     }
-    //non funzioner‡ con + blocchi
+    //non funzioner√† con + blocchi
     __syncthreads();
     //the first thread of each block decreases the value
     if(threadIdx.x ==0){
@@ -621,16 +622,16 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     err = cudaMemcpy((dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), &(data.varsYetToBeAssigned), sizeof(int), cudaMemcpyHostToDevice);
 
 
-    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock >> > (dev_matrix, dev_varBothNegatedAndNot, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, -1);
+    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, dev_varBothNegatedAndNot, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, -1);
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
 
 
     //pure literal check
-    pureLiteralCheck << <blocksToLaunch_VARS, threadsPerBlock >> > (dev_matrix, (dev_data.dev_partialAssignment), (dev_varBothNegatedAndNot), (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), SM_dev_varsYetToBeAssigned);
+    pureLiteralCheck << <blocksToLaunch_VARS, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, (dev_data.dev_partialAssignment), (dev_varBothNegatedAndNot), (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), SM_dev_varsYetToBeAssigned);
     parallelSum << <1, blocksToLaunch_VARS, blocksToLaunch_VARS * sizeof(int) >> > (SM_dev_varsYetToBeAssigned, dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods);
 
     //here threads deal with noGoods
-    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock >> > (dev_matrix, dev_varBothNegatedAndNot, dev_varBothNegatedAndNot, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,1);
+    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)  >> > (dev_matrix, dev_varBothNegatedAndNot, dev_varBothNegatedAndNot, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,1);
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
 
 
@@ -649,7 +650,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     err = cudaMemcpy((dev_data.dev_unitPropValuestoRemove), (data.unitPropValuestoRemove), sizeof(int) * (noVars + 1), cudaMemcpyHostToDevice);
     err = cudaMemcpy((dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), &(data.varsYetToBeAssigned), sizeof(int), cudaMemcpyHostToDevice);
 
-	removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock >> > (dev_matrix, dev_varBothNegatedAndNot, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, -1);
+	removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, dev_varBothNegatedAndNot, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, -1);
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
 
     //here threads deal with noGoods
@@ -750,6 +751,8 @@ void deallocateCUDA(struct NoGoodDataCUDA_devDynamic *data_dev) {
     cudaFree(data_dev->dev_unitPropValuestoRemove);
     cudaFree(data_dev->dev_varsYetToBeAssigned_dev_currentNoGoods);
     cudaFree(dev_varBothNegatedAndNot);
+	cudaFree(SM_dev_varsYetToBeAssigned);
+    cudaFree(SM_dev_currentNoGoods);
 }
 
 void storePrevStateOnDevice(struct NoGoodDataCUDA_devDynamic dev_data, int** dev_prevPartialAssignment, int** dev_prevNoOfVarPerNoGood, int** dev_prevLonelyVar, int** dev_noGoodStatus, int** dev_prevVarsAppearingInRemainingNoGoods, int** dev_prevVarsYetToBeAssigned_prevCurrentNoGoods, int** dev_prevUnitPropValuestoRemove) {
@@ -816,7 +819,7 @@ __global__ void parallelSum(int* inArray, int* out) {
     }
     __syncthreads();
     if (thPos == 0) {
-        *out= s_array[0];
+        *out=*out+ s_array[0];
         inArray[0] = 0;
     }
 }
