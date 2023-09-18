@@ -149,7 +149,7 @@ int main(int argc, char const* argv[]) {
     //**********************
     //USEFUL CODE STARTS HERE:
     //**********************
-	cudaProfilerStart();
+
     //we launch the kernel that will handle the pure literals
     //here threads deal with vars
     err = cudaMemcpy((dev_data.dev_lonelyVar), (data.lonelyVar), sizeof(int) * noNoGoods, cudaMemcpyHostToDevice);
@@ -173,7 +173,7 @@ int main(int argc, char const* argv[]) {
     removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, dev_varBothNegatedAndNot, dev_varBothNegatedAndNot, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, 1);
     parallelSum <<<1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods+1));
 
-  	//we copy only the data that has been (possibly) modified
+    //we copy only the data that has been (possibly) modified
     err = cudaMemcpy((data.matrix_noGoodsStatus), (dev_data.dev_matrix_noGoodsStatus), sizeof(int) * noNoGoods, cudaMemcpyDeviceToHost);
     err = cudaMemcpy((data.partialAssignment), (dev_data.dev_partialAssignment), sizeof(int) * (noVars + 1), cudaMemcpyDeviceToHost);
     err = cudaMemcpy(&(data.varsYetToBeAssigned), (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), sizeof(int), cudaMemcpyDeviceToHost);
@@ -220,7 +220,7 @@ int main(int argc, char const* argv[]) {
     //if we somehow already have an assignment, we can skip the search
     if (data.currentNoGoods == 0) {
         printf("\n\n\n**********SATISFIABLE**********\n\n\n");
-       	//we free the cuda side
+        //we free the cuda side
         deallocateCUDA(&dev_data);
         //the matrix (& vectors) on the host isn't needed anymore
         deallocateHost(&data);
@@ -248,7 +248,6 @@ int main(int argc, char const* argv[]) {
     //calculate and print the time elapsed
     t = clock() - t;
     double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
-    cudaProfilerStop();
     printf("\n\n took %f seconds to execute \n", time_taken);
     return 0;
 }
@@ -335,15 +334,15 @@ void popualteMatrix(FILE* ptr, struct NoGoodDataCUDA_host* data, struct NoGoodDa
 
     //we need to initialize the memory 
     for(int i=1; i<(noVars + 1); i++){
-    	data->unitPropValuestoRemove[i]=0;
-    	data->varsAppearingInRemainingNoGoods[i]=0;
-    	data->partialAssignment[i]=0;
-    	varBothNegatedAndNot[i]=0;
+        data->unitPropValuestoRemove[i]=0;
+        data->varsAppearingInRemainingNoGoods[i]=0;
+        data->partialAssignment[i]=0;
+        varBothNegatedAndNot[i]=0;
     }
     for(int i=0; i<noNoGoods; i++){
-    	data->matrix_noGoodsStatus[i]=0;
-    	data->lonelyVar[i]=0;
-    	data->noOfVarPerNoGood[i]=0;
+        data->matrix_noGoodsStatus[i]=0;
+        data->lonelyVar[i]=0;
+        data->noOfVarPerNoGood[i]=0;
     }
 
 
@@ -403,7 +402,7 @@ void popualteMatrix(FILE* ptr, struct NoGoodDataCUDA_host* data, struct NoGoodDa
 
     //we copy varBothNegatedAndNot
     cudaMemcpy(dev_varBothNegatedAndNot, varBothNegatedAndNot, sizeof(int) * (noVars + 1), cudaMemcpyHostToDevice);
-  	//copy all the data
+    //copy all the data
     cudaMemcpy((dev_data->dev_partialAssignment), data->partialAssignment, sizeof(int) * (noVars + 1), cudaMemcpyHostToDevice);
     cudaMemcpy((dev_data->dev_noOfVarPerNoGood), data->noOfVarPerNoGood, sizeof(int) * (noNoGoods), cudaMemcpyHostToDevice);
     cudaMemcpy((dev_data->dev_matrix_noGoodsStatus), data->matrix_noGoodsStatus, sizeof(int) * (noNoGoods), cudaMemcpyHostToDevice);
@@ -452,6 +451,7 @@ __global__ void  pureLiteralCheck(int* dev_matrix, int* dev_partialAssignment, i
     __shared__ int valToDecrement;
     //the first thread of each block resets the counter for the block
     if (threadIdx.x == 0) {
+        SM_dev_varsYetToBeAssigned[blockIdx.x]=0;
         valToDecrement = 0;
     }
     __syncthreads();
@@ -492,8 +492,9 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* dev_varBothNegatedA
     __shared__ int valToDecrement;
     //the first thread of each block resets the counter for the block
     if(threadIdx.x==0){
-		valToDecrement=0;
-	}
+        SM_dev_currentNoGoods[blockIdx.x]=0;
+        valToDecrement=0;
+    }
     __syncthreads();
     register int i;
     decrease[threadIdx.x] = 0;
@@ -650,7 +651,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     err = cudaMemcpy((dev_data.dev_unitPropValuestoRemove), (data.unitPropValuestoRemove), sizeof(int) * (noVars + 1), cudaMemcpyHostToDevice);
     err = cudaMemcpy((dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), &(data.varsYetToBeAssigned), sizeof(int), cudaMemcpyHostToDevice);
 
-	removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, dev_varBothNegatedAndNot, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, -1);
+    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, dev_varBothNegatedAndNot, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, -1);
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
 
     //here threads deal with noGoods
@@ -751,7 +752,7 @@ void deallocateCUDA(struct NoGoodDataCUDA_devDynamic *data_dev) {
     cudaFree(data_dev->dev_unitPropValuestoRemove);
     cudaFree(data_dev->dev_varsYetToBeAssigned_dev_currentNoGoods);
     cudaFree(dev_varBothNegatedAndNot);
-	cudaFree(SM_dev_varsYetToBeAssigned);
+    cudaFree(SM_dev_varsYetToBeAssigned);
     cudaFree(SM_dev_currentNoGoods);
 }
 
@@ -813,13 +814,11 @@ __global__ void parallelSum(int* inArray, int* out) {
     for (int i = blockDim.x / 2; i > 0; i >>= 1) {
         if (thPos < i) {
             s_array[thPos] += s_array[thPos + i];
-            inArray[thPos + i] = 0;
         }
         __syncthreads();
     }
     __syncthreads();
     if (thPos == 0) {
         *out=*out+ s_array[0];
-        inArray[0] = 0;
     }
 }
