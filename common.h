@@ -34,12 +34,12 @@
 //for the serial program
 struct NoGoodData {
     int currentNoGoods; //the number of non satisfied clauses (yet)
-    int** matrix; //the matrix that holds the clauses
+    int** matrix; //the matrix that holds the clauses(only the fst col will be modified)
     int* partialAssignment;//we skip the cell 0 in order to maintain coherence with the var numbering
     int* noOfVarPerNoGood; //a int array that holds the number of variables in each clause
     int* lonelyVar; //a int array that holds if noOfVarPerNoGood[i]==1 the index of the only variable in the clause
     int varsYetToBeAssigned; //the number of variables that are not yet assigned
-    int *varsAppearingInRemainingNoGoods; //a int array keeping track for each variable in how many no goods it shows up
+    int* varsAppearingInRemainingNoGoodsPositiveNegative;//a int array keeping track for each variable in how many no goods it shows up (positive and negative), the array has len 2*(vars+1)
 };
 
 //for CUDA
@@ -61,6 +61,7 @@ struct NoGoodDataCUDA_devDynamic {
     int* dev_varsAppearingInRemainingNoGoods;
     int* dev_matrix_noGoodsStatus; //the status of each clause (satisfied/unsatisfied) (used to avoid copying the whole matrix from device to host)
     int* dev_unitPropValuestoRemove; //used to store on the device the signs (found by unit propagation) of the variables to eliminate, in the serial version this wasn't necessary since removeNoGoodSetsContaining was called for each variable inside of a loop in unitProp
+    
     //a piece of the former "NoGoodData", it contains two integer varaiables allocated on the device 
     int* dev_varsYetToBeAssigned_dev_currentNoGoods; //the number of variables that are not yet assigned and the number of non satisfied clauses (yet) 
 };
