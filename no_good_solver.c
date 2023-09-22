@@ -26,7 +26,7 @@ void revert(struct NoGoodData*, int**, int**, int**, int**, int**);
 int noVars = 0; //the number of vars in the model
 int noNoGoods = 0; //the no of clauses (initially) in the model
 //int *varBothNegatedAndNot = NULL; //a int array that holds the status of the variables in the clauses (see the defines above)
-bool breakSearchAfterOne = false; //if true, the search will stop after the first solution is found
+bool breakSearchAfterOne = true; //if true, the search will stop after the first solution is found
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 
