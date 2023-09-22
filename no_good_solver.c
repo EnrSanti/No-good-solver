@@ -10,7 +10,7 @@ void popualteMatrix(FILE*, struct NoGoodData*);
 void printMatrix(int**);
 void printVarArray(int*);
 void allocateMatrix(int***);
-void deallocateMatrix(int***);
+void deallocateMatrix(int***, int **, int **,int **,int**);
 bool solve(struct NoGoodData, int, int);
 int unitPropagation(struct NoGoodData*);
 void pureLiteralCheck(struct NoGoodData*);
@@ -44,8 +44,7 @@ void main(int argc, char const* argv[]) {
     //print the matrix
     //printMatrix(data.matrix);
     printf("\n");
-    //allocate the partial assignment array
-    data.partialAssignment = (int*)calloc(noVars + 1, sizeof(int));
+    
 
     pureLiteralCheck(&data);
 
@@ -54,7 +53,8 @@ void main(int argc, char const* argv[]) {
         printf("\n\n\n**********SATISFIABLE**********\n\n\n");
         printf("Assignment:\n");
         printVarArray(data.partialAssignment);
-        deallocateMatrix(&(data.matrix));
+        deallocateMatrix(&(data.matrix),&(data.partialAssignment),&(data.noOfVarPerNoGood),&(data.lonelyVar), &(data.varsAppearingInRemainingNoGoodsPositiveNegative));
+
         return;
     }
 
@@ -68,7 +68,7 @@ void main(int argc, char const* argv[]) {
         printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
     }
 
-    deallocateMatrix(&(data.matrix));
+    deallocateMatrix(&(data.matrix),&(data.partialAssignment),&(data.noOfVarPerNoGood),&(data.lonelyVar), &(data.varsAppearingInRemainingNoGoodsPositiveNegative));
 
 }
 
@@ -88,6 +88,7 @@ void readFile_allocateMatrix(const char* str, struct NoGoodData* data) {
     }
     bool isComment = true;
     bool newLine = true;
+    //we skip the comments
     while (isComment == true && !feof(ptr)) {
         ch = fgetc(ptr);
 
@@ -136,6 +137,8 @@ void popualteMatrix(FILE* ptr, struct NoGoodData* data) {
     //varBothNegatedAndNot = (int *)calloc(noVars + 1, sizeof(int));
     data->noOfVarPerNoGood = (int*)calloc(noNoGoods, sizeof(int));
     data->lonelyVar = (int*)calloc(noNoGoods, sizeof(int));
+    //allocate the partial assignment array
+    data->partialAssignment = (int*)calloc(noVars + 1, sizeof(int));
     //data->varsAppearingInRemainingNoGoods=(int *)calloc(noVars + 1, sizeof(int));
     data->varsAppearingInRemainingNoGoodsPositiveNegative = (int*)calloc(2 * (noVars + 1), sizeof(int));
 
@@ -217,13 +220,18 @@ void allocateMatrix(int*** matrix) {
 
 }
 
-//deallocates the matrix
-void deallocateMatrix(int*** matrix) {
+//deallocates the matrix and the other data
+void deallocateMatrix(int*** matrix, int **partialAssignment, int **noOfVarPerNoGood, int **lonelyVar, int **varsAppearingInRemainingNoGoodsPositiveNegative) {
 
     for (int i = 0; i < noNoGoods; i++) {
         free((*matrix)[i]);
     }
     free((*matrix));
+    free(*partialAssignment);
+    free(*noOfVarPerNoGood);
+    free(*lonelyVar);
+    free(*varsAppearingInRemainingNoGoodsPositiveNegative);
+
 }
 
 //prints the content of the array passed (which for simplicity is an array of len noVars+1)
@@ -344,12 +352,14 @@ void removeNoGoodSetsContaining(int*** matrix, int* currentNoGoods, int** varsAp
             //remove the nogood set
             (*matrix)[i][0] = SATISFIED;
             (*currentNoGoods)--;
+            //we decrease the vars that were in the NG
             for (int j = 1; j < noVars + 1; j++) {
                 if ((*matrix)[i][j] != 0 && (*varsAppearingInRemainingNoGoodsPositiveNegative)[j + (noVars + 1) * ((int)(1 + (*matrix)[i][j]) / 2)] > 0)
                     (*varsAppearingInRemainingNoGoodsPositiveNegative)[j + (noVars + 1) * ((int)(1 + (*matrix)[i][j]) / 2)]--;
             }
         }
     }
+    //we set to 0 both the negated version and the positive one of the vars assigned (i.e this method is called when an assignemnt is made)
     (*varsAppearingInRemainingNoGoodsPositiveNegative)[varIndex] = 0;
     (*varsAppearingInRemainingNoGoodsPositiveNegative)[varIndex + noVars + 1] = 0;
 }
