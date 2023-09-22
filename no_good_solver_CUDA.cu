@@ -111,7 +111,7 @@ int main(int argc, char const* argv[]) {
         //printError("Insert the file path");
         return -2;
     }
-
+    argv[1] = "testsNG_big\\test_10.txt";
     //create the strucure both on the device (without a struct) and on the host
     struct NoGoodDataCUDA_host data;
     struct NoGoodDataCUDA_devDynamic dev_data;
@@ -294,7 +294,7 @@ gpuErrchk( cudaPeekAtLastError() );
     //cudaGetSymbolAddress((void**)&addrSM, SM_dev_conflict);   
     gpuErrchk( cudaPeekAtLastError() );
     err = cudaMemcpyFromSymbol(&(conflict), (dev_conflict22), sizeof(int), 0, cudaMemcpyDeviceToHost);
-    parallelSum <<<1 , sizeof(int)* blocksToLaunch_NG,sizeof(int)* blocksToLaunch_NG >>> (SM_dev_conflict, (addr));
+    parallelSum <<<1 , blocksToLaunch_NG,sizeof(int)* blocksToLaunch_NG >>> (SM_dev_conflict, (addr));
     //************************************
     //end unit propagation
     
@@ -354,7 +354,7 @@ gpuErrchk( cudaPeekAtLastError() );
 
 
      //if we find a conlfict at the top level, the problem is unsatisfiable
-    printf("CONFLICT %d\n", conflict );
+    printf("CONFLICT %d, compare against: %d\n", conflict, blocksToLaunch_NG* NO_CONFLICT);
     if (conflict != blocksToLaunch_NG*NO_CONFLICT) {
         printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
         //we free the cuda side
@@ -964,7 +964,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     int* addr;
     cudaGetSymbolAddress((void**)&addr, dev_conflict22);  
 
-    parallelSum <<<1 , sizeof(int)* blocksToLaunch_NG,sizeof(int)* blocksToLaunch_NG >>> (SM_dev_conflict, (addr));
+    parallelSum <<<1 , blocksToLaunch_NG,sizeof(int)* blocksToLaunch_NG >>> (SM_dev_conflict, (addr));
 
 
     err = cudaMemcpyAsync(&(data.varsYetToBeAssigned), (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), sizeof(int), cudaMemcpyDeviceToHost);
@@ -1147,10 +1147,10 @@ __global__ void parallelSum(int* inArray, int* out) {
    extern __shared__ int s_array[];
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
     s_array[thPos] = inArray[threadIdx.x];
-    // printf("out in: %d\n",*out );
-    //printf("in // sum th %d, i see %d, blockdim: %d \n",thPos, s_array[thPos],blockDim.x);
+    printf("out in: %d\n",*out );
+    printf("in // sum th %d, i see %d, blockdim: %d \n",thPos, s_array[thPos],blockDim.x);
     __syncthreads();
-    for (int i = blockDim.x / 2; i > 0; i >>= 1) {
+    for (int i = (int) blockDim.x / 2; i > 0; i >>= 1) {
         if (thPos < i) {
             s_array[thPos] += s_array[thPos + i];
         }
@@ -1158,8 +1158,13 @@ __global__ void parallelSum(int* inArray, int* out) {
     }
     __syncthreads();
     if (thPos == 0) {
+        //i don't change the whole method if inArray is odd, i deal with it here, we add the last (odd) element, if the block has > 1 th (thus if we use a odd number >1 than SMs)
+        if(blockDim.x%2!=0 && blockDim.x > 1){
+            printf("HEREEEEEEEEE %d", s_array[blockDim.x - 1]);
+            *out = *out + s_array[blockDim.x-1];
+        }
         *out=*out+ s_array[0];
-       // printf("out: %d\n",*out );
+        printf("out: %d\n",*out );
     }
 }
 

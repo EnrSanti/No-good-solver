@@ -30,7 +30,7 @@ bool breakSearchAfterOne = true; //if true, the search will stop after the first
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 
-void main(int argc, char const* argv[]) {
+void mai2n(int argc, char const* argv[]) {
 
     //if the user didn't insert the file path or typed more
     if (argc != 2) {
