@@ -30,7 +30,7 @@ bool breakSearchAfterOne = true; //if true, the search will stop after the first
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 
-void mai2n(int argc, char const* argv[]) {
+void main(int argc, char const* argv[]) {
 
     //if the user didn't insert the file path or typed more
     if (argc != 2) {
@@ -47,6 +47,13 @@ void mai2n(int argc, char const* argv[]) {
     
 
     pureLiteralCheck(&data);
+    if (unitPropagation(&data) == CONFLICT) {
+        printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
+        deallocateMatrix(&(data.matrix), &(data.partialAssignment), &(data.noOfVarPerNoGood), &(data.lonelyVar), &(data.varsAppearingInRemainingNoGoodsPositiveNegative));
+
+        return false;
+    }
+
 
     //if we somehow already have an assignment, we can skip the search
     if (data.currentNoGoods == 0) {
@@ -246,11 +253,13 @@ void printVarArray(int* array) {
 //performs the search by recursively calling itself twice (once for each value of the variable)
 bool solve(struct NoGoodData data, int var, int value) {
 
+    //printf("currentLonelyrent no goods: %d, current vars yet: %d assign var: %d=%d\n", data.currentNoGoods, data.varsYetToBeAssigned, var, value);
+
     //if we want to stop after the first solution and it's already found
     if (solutionFound && breakSearchAfterOne)
         return true;
 
-
+    
 
     //local variables which will be used to revert the state of the data structure when backtracking
     int* prevPartialAssignment = NULL;
@@ -267,12 +276,12 @@ bool solve(struct NoGoodData data, int var, int value) {
 
     pureLiteralCheck(&data);
 
-    assignValueToVar(&data, var, value);
 
     //nothing:
     learnClause();
     //if we find a conflict we backtrack (we need to revert the state first)
     if (unitPropagation(&data) == CONFLICT) {
+        printf("BACKTRACK\n");
         revert(&data, &prevPartialAssignment, &prevNoOfVarPerNoGood, &prevLonelyVar, &noGoodStatus, &prevVarsAppearingInRemainingNoGoods);
         return false;
     }
@@ -288,6 +297,7 @@ bool solve(struct NoGoodData data, int var, int value) {
     }
     //if there are no more variables to assign (AND having previously checked that not all the no good are sat) we backtrack
     if (data.varsYetToBeAssigned == 0) {
+        printf("BACKTRACK\n");
         revert(&data, &prevPartialAssignment, &prevNoOfVarPerNoGood, &prevLonelyVar, &noGoodStatus, &prevVarsAppearingInRemainingNoGoods);
         return false;
     }
