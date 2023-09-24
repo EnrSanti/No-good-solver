@@ -2,29 +2,35 @@
 
 
 #WARNING: THIS PROGRAM ISN't OPTIMIZED AD ALL
+#could be done much better using maps, anyway, it's just to create instances
 
 import random
 from random import choice
 
-filesToCreate=30
+
+############################  MODIFIABLE VARIABLES  ################################
+####################################################################################
+filesToCreate=50
 
 #how many clauses we want in an instance (max and min)
 minNoGoods=10
-maxNoGoods=50
+maxNoGoods=2000
 
 minNoVars=5
-maxNoVars=20
+maxNoVars=1000
+
+osType="linux"; # "windows" or "linux" #used just to specify the directory format
+####################################################################################
+####################################################################################
 
 
 #we set the seed so we always generate that instances
 random.seed(12)
 
-osType="linux"; # "windows" or "linux" #used just to specify the directory format
 
 #the following function is taken from: https://www.w3resource.com/python-exercises/list/python-data-type-list-exercise-145.php
 def generate_random(from_,to_, alreadyInNoGood):
     result = choice([i for i in range(from_,to_) if (i not in alreadyInNoGood)])
-    print(str(alreadyInNoGood)+"\n")
     return result
 
 def generateNoGood(novars,actualVars):
@@ -55,8 +61,8 @@ if(osType=="windows"):
 	directoryPathNG="testsNG\\"
 	directoryPathSAT="testsSAT\\"
 else:
-	directoryPathNG="testsNG_small/"
-	directoryPathSAT="testsSAT_small/"
+	directoryPathNG="testsNG/"
+	directoryPathSAT="testsSAT/"
 
 
 
