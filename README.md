@@ -16,4 +16,4 @@ It contains different folders with different CNF-models (different sizes) and th
 
 The python script can be modified in order to generate new test cases, both CNF-models and no no-good-models will be generated.
 
-# WARNING: currently there are no checks on the existance of the file specified model, thus if you specify a non existing file or one without reading permission it's core dump.
+# WARNING: currently there are no checks on the existance of the file specified as model, thus if you specify a non existing file or one without reading permission it's core dump.
