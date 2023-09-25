@@ -15,3 +15,5 @@ It contains different folders with different CNF-models (different sizes) and th
 **Usage of no_good_solver_CUDA.CU: (compile, e.g.  nvcc no_good_solver_CUDA.cu -o no_good_solver_CUDA) then call ./no_good_solver_CUDA "\<path of the model\>"**
 
 The python script can be modified in order to generate new test cases, both CNF-models and no no-good-models will be generated.
+
+#WARNING: currently there are no checks on the existance of the file specified model, thus if you specify a non existing file or one without reading permission it's core dump.
