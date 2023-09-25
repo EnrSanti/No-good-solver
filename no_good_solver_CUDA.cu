@@ -67,7 +67,6 @@ __device__ int dev_noNoGoods; //the no of clauses (initially) in the model on th
 __device__ int dev_varToAssign;
 __device__ int dev_valueToAssing;
 __device__ int chooseVarResult;
-__device__ int unitPorpResult;
 
 int* returningNGchanged;
 
@@ -104,6 +103,7 @@ bool solutionFound = false; //if true, a solution was found, used to stop the se
 
 int main(int argc, char const* argv[]) {
 
+    cudaProfilerStart();
 
     //we just check, then GPUSno won't be used to scale the program on multiple devices
     int GPUSno;
@@ -134,7 +134,6 @@ int main(int argc, char const* argv[]) {
         //printError("The GPU is not supported, buy a better one :)");
         return -3;
     }
-
     clock_t t;
     t = clock();
 
@@ -209,22 +208,6 @@ int main(int argc, char const* argv[]) {
     //************************************
     //we call unit prop on the device, yes it's not "device work" still less consuming than copying back and forth though
     unitPropagation2<<<1,1>>>((dev_data.dev_unitPropValuestoRemove),dev_data.dev_matrix_noGoodsStatus,dev_data.dev_noOfVarPerNoGood,(dev_data.dev_partialAssignment),dev_data.dev_lonelyVar,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, dev_matrix,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
-   
-
-    int unitPorpRes=1;
-    //we copy the result and
-    err = cudaMemcpyFromSymbol(&(unitPorpRes), (unitPorpResult), sizeof(int), 0, cudaMemcpyDeviceToHost);
-    
-   
-    if(unitPorpRes==CONFLICT){
-        printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
-        //we free the cuda side
-        deallocateCUDA(&dev_data);
-        //the matrix (& vectors) on the host isn't needed anymore
-        deallocateHost(&data);
-        return 0;
-    }
-
 
     removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods /*, -1*/);
     
@@ -293,7 +276,7 @@ int main(int argc, char const* argv[]) {
     else {
         printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
     }
-    
+    cudaProfilerStop();
     //we free the cuda side
     deallocateCUDA(&dev_data);
     //the matrix (& vectors) on the host isn't needed anymore
@@ -307,7 +290,7 @@ int main(int argc, char const* argv[]) {
 
     return 0;
 }
-
+    
 //reads the content of a simil DMACS file and populates the data structure
 // (not the fanciest function but it's called just once)
 void readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data, struct NoGoodDataCUDA_devDynamic* dev_data) {
@@ -644,12 +627,7 @@ __global__ void unitPropagation2(int* dev_unitPropValuestoRemove,int* dev_matrix
     for (int i = 0; i < dev_noNoGoods; i++) {
         //if the no good is not satisfied and it has only one variable to assign we assign it
         if (dev_matrix_noGoodsStatus[i] == UNSATISFIED && dev_noOfVarPerNoGood[i] == 1 && dev_partialAssignment[dev_lonelyVar[i]] == UNASSIGNED) {
-            //if the var already assigned AND it's assigne the opposite value we have a conflict
-            if ((dev_partialAssignment)[dev_lonelyVar[i]] == *(dev_matrix+i*(dev_noVars + 1)+dev_lonelyVar[i])){
-                unitPorpResult=CONFLICT;
-                printf("****************************************conflict IN UNIT PROP\n");
-                return;
-            }
+
             //lonelyVar[i] is a column index
             //assing variable to value
             //printf("we assing var %d\n",dev_lonelyVar[i]);
@@ -660,7 +638,6 @@ __global__ void unitPropagation2(int* dev_unitPropValuestoRemove,int* dev_matrix
           
         }
     }
-    unitPorpResult=NO_CONFLICT;
 }
 
 //removes the literal from the nogood if the sign is the one indicated (part of unitPropagaition)
@@ -803,18 +780,6 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     //************************************
     //we call unit prop on the device, yes it's not "device work" still less consuming than copying back and forth though
     unitPropagation2<<<1,1>>>((dev_data.dev_unitPropValuestoRemove),dev_data.dev_matrix_noGoodsStatus,dev_data.dev_noOfVarPerNoGood,(dev_data.dev_partialAssignment),dev_data.dev_lonelyVar,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, dev_matrix,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
-   
-
-    int unitPorpRes=1;
-    //we copy the result and
-    cudaError_t err = cudaMemcpyFromSymbol(&(unitPorpRes), (unitPorpResult), sizeof(int), 0, cudaMemcpyDeviceToHost);
-    
-    
-    if(unitPorpRes==CONFLICT){
-        revert(&dev_data, &data, &dev_prevPartialAssignment, &dev_prevNoOfVarPerNoGood, &dev_prevLonelyVar, &dev_matrix_prevNoGoodsStatus, &dev_prevVarsAppearingInRemainingNoGoods, &dev_prevVarsYetToBeAssigned_prevCurrentNoGoods, &dev_prevUnitPropValuestoRemove);
-        return false;
-    }
-
 
     removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods /*, -1*/);
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
@@ -830,7 +795,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     parallelSum <<<1 , blocksToLaunch_NG,sizeof(int)* blocksToLaunch_NG >>> (SM_dev_conflict, (addr));
 
 
-    err = cudaMemcpyAsync(&(data.varsYetToBeAssigned), (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), sizeof(int), cudaMemcpyDeviceToHost);
+    cudaError_t err = cudaMemcpyAsync(&(data.varsYetToBeAssigned), (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods), sizeof(int), cudaMemcpyDeviceToHost);
     err = cudaMemcpyAsync(&(data.currentNoGoods), (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), sizeof(int), cudaMemcpyDeviceToHost);
     err = cudaMemcpyFromSymbol(&(conflict), (dev_conflict), sizeof(int), 0, cudaMemcpyDeviceToHost);
     //gpuErrchk( cudaPeekAtLastError() );
