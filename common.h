@@ -27,6 +27,24 @@
 #define APPEARS_ONLY_NEG -1
 #define APPEARS_BOTH 3
 
+int checkSolution(int** matrix,int* partialAssignment,int noNoGoods, int noVars){   
+    int currentNGsat=0;   
+    //for each no good we check if there's an assignment falsifying it
+    for(int i=0; i<noNoGoods; i++){
+        for(int j=1; j<noVars+1; j++){
+            //can be optimized a lot, however is just to check
+            if((matrix[i][j]==POSITIVE_LIT && partialAssignment[j]==FALSE) || (matrix[i][j]==NEGATED_LIT && partialAssignment[j]==TRUE)){
+                currentNGsat=1;
+                break;
+            }
+        }   
+        if(currentNGsat==0){
+            return 0;
+        }else
+            currentNGsat=0;
+    }
+    return 1;
+}
 
 
 //**DATA**//
