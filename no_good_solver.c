@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "common.h"
 
-void readFile_allocateMatrix(const char*, struct NoGoodData*);
+int readFile_allocateMatrix(const char*, struct NoGoodData*);
 void printError(char*);
 void popualteMatrix(FILE*, struct NoGoodData*);
 void printMatrix(int**);
@@ -41,7 +41,9 @@ void main(int argc, char const* argv[]) {
     struct NoGoodData data;
     //printf("%s", string);
     //we populate it with the data from the file
-    readFile_allocateMatrix(argv[1], &data);
+    if(readFile_allocateMatrix(argv[1], &data)==-1){
+    	return;
+    }
     //print the matrix
     //printMatrix(data.matrix);
     printf("\n");
@@ -82,7 +84,7 @@ void main(int argc, char const* argv[]) {
 
 //reads the content of a simil DMACS file and populates the data structure
 // (not the fanciest function but it's called just once)
-void readFile_allocateMatrix(const char* str, struct NoGoodData* data) {
+int readFile_allocateMatrix(const char* str, struct NoGoodData* data) {
 
     FILE* ptr;
     char ch;
@@ -90,7 +92,7 @@ void readFile_allocateMatrix(const char* str, struct NoGoodData* data) {
 
     if (NULL == ptr) {
         printError("No such file or can't be opened");
-        return;
+        return -1;
     }
     bool isComment = true;
     bool newLine = true;
@@ -134,6 +136,7 @@ void readFile_allocateMatrix(const char* str, struct NoGoodData* data) {
     popualteMatrix(ptr, data);
 
     fclose(ptr);
+    return 0;
 }
 
 //subprocedure called by readFile_allocateMatrix it populates the data structure and other arrays such as varBothNegatedAndNot
