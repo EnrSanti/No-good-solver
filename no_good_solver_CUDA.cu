@@ -27,7 +27,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 //use: gpuErrchk( cudaPeekAtLastError() );
 
 
-void readFile_allocateMatrix(const char*, struct NoGoodDataCUDA_host*, struct NoGoodDataCUDA_devDynamic*);
+int readFile_allocateMatrix(const char*, struct NoGoodDataCUDA_host*, struct NoGoodDataCUDA_devDynamic*);
 void printError(char[]);
 void popualteMatrix(FILE*, struct NoGoodDataCUDA_host*, struct NoGoodDataCUDA_devDynamic*);
 void allocateMatrix();
@@ -131,14 +131,16 @@ int main(int argc, char const* argv[]) {
     printf("*************************************************\n");
     //we check if the GPU is supported, since we will launch at least 64 threads per block (in order to have 4 warps per block, and exploit the new GPUs)
     if (threadsPerBlock == 0) {
-        //printError("The GPU is not supported, buy a better one :)");
+        printf("The GPU is not supported, buy a better one :)");
         return -3;
     }
     clock_t t;
     t = clock();
 
     //we populate it with the data from the file
-    readFile_allocateMatrix(argv[1], &data, &dev_data);
+    if(readFile_allocateMatrix(argv[1], &data, &dev_data)==-1){
+        return 0;
+    }
 
 
    
@@ -293,15 +295,15 @@ int main(int argc, char const* argv[]) {
     
 //reads the content of a simil DMACS file and populates the data structure
 // (not the fanciest function but it's called just once)
-void readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data, struct NoGoodDataCUDA_devDynamic* dev_data) {
+int readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data, struct NoGoodDataCUDA_devDynamic* dev_data) {
 
     FILE* ptr;
     char ch;
     ptr = fopen(str, "r");
 
-    if (NULL == ptr) {
-        //printError("No such file or can't be opened");
-        return;
+      if (NULL == ptr) {
+        printf("\nNo such file or can't be opened\n");
+        return -1;
     }
 
     bool isComment = true;
@@ -357,6 +359,7 @@ void readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data, 
     err = cudaMemcpyToSymbol(dev_conflict , &conflict, sizeof(int), 0, cudaMemcpyHostToDevice);
     popualteMatrix(ptr, data, dev_data);
     fclose(ptr);
+    return 0;
 }
 
 //subprocedure called by readFile_allocateMatrix it populates the data structure and other arrays such as varBothNegatedAndNot
