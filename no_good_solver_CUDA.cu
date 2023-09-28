@@ -100,7 +100,7 @@ int* SM_dev_currentNoGoods;
 bool breakSearchAfterOne = true; //if true, the search will stop after the first solution is found
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
-
+int counter=0;
 int main(int argc, char const* argv[]) {
 
     cudaProfilerStart();
@@ -108,7 +108,7 @@ int main(int argc, char const* argv[]) {
     //we just check, then GPUSno won't be used to scale the program on multiple devices
     int GPUSno;
     if (cudaGetDeviceCount(&GPUSno) != cudaSuccess) {
-        //printError("No GPU detected");
+        printf("No GPU detected, buy a better one :)");
         return -1;
     }
 
@@ -289,10 +289,11 @@ int main(int argc, char const* argv[]) {
     double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
     printf("\n\n took %f seconds to execute \n", time_taken);
 
-
+    printf("counter %d\n",counter);
     return 0;
 }
     
+
 //reads the content of a simil DMACS file and populates the data structure
 // (not the fanciest function but it's called just once)
 int readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data, struct NoGoodDataCUDA_devDynamic* dev_data) {
@@ -301,7 +302,8 @@ int readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data, s
     char ch;
     ptr = fopen(str, "r");
 
-      if (NULL == ptr) {
+    if (NULL == ptr) {
+        //printError("No such file or can't be opened");
         printf("\nNo such file or can't be opened\n");
         return -1;
     }
@@ -713,10 +715,10 @@ __global__ void chooseVar(int* dev_partialAssignment, int* varsAppearingInRemain
 }
 
 bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host data, int var, int value) {
-    
+    cudaDeviceSynchronize();
     //printf("currentLonelyrent no goods: %d, current vars yet: %d assign var: %d=%d\n", data.currentNoGoods, data.varsYetToBeAssigned,var,value );
     //gpuErrchk( cudaPeekAtLastError() );
-
+    counter++;
     //if we want to stop after the first solution and it's already found
     if (solutionFound && breakSearchAfterOne){
         return true;
@@ -845,7 +847,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
         return false;
     }
     
-    return false;
+    return true;
 }
 
 
