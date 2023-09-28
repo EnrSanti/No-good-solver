@@ -26,7 +26,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 
 //use: gpuErrchk( cudaPeekAtLastError() );
 
-
 int readFile_allocateMatrix(const char*, struct NoGoodDataCUDA_host*, struct NoGoodDataCUDA_devDynamic*);
 void printError(char[]);
 void popualteMatrix(FILE*, struct NoGoodDataCUDA_host*, struct NoGoodDataCUDA_devDynamic*);
@@ -36,7 +35,7 @@ void deallocateHost(struct NoGoodDataCUDA_host*);
 void deallocateCUDA(struct NoGoodDataCUDA_devDynamic*);
 
 __global__ void pureLiteralCheck(int*, int*, int*, int*,int *);
-__global__ void removeNoGoodSetsContaining(int*, int*, int*, int*, int*,int */*, int */);
+__global__ void removeNoGoodSetsContaining(int*, int*, int*, int*, int*,int *,int *);
 __global__ void removeLiteralFromNoGoods(int*, int*,int*, int*, int*,int*);
 __global__ void assingValue(int*,int *,int *);
 __global__ void decreaseVarsAppearingInNGsatisfied(int*, int*, int* , int*);
@@ -50,7 +49,6 @@ int getSMcores(struct cudaDeviceProp);
 bool solve(struct NoGoodDataCUDA_devDynamic, struct NoGoodDataCUDA_host, int, int);
 void storePrevStateOnDevice(struct NoGoodDataCUDA_devDynamic, int**, int**, int**, int**, int**, int**, int**);
 void revert(struct NoGoodDataCUDA_devDynamic*, struct NoGoodDataCUDA_host*, int**, int**, int**, int**, int**, int**, int**);
-
 
 //algorithm data:
 
@@ -69,7 +67,7 @@ __device__ int dev_valueToAssing;
 __device__ int chooseVarResult;
 
 int* returningNGchanged;
-
+int* returningVarschanged;
 
 //technical (GPU related, but on host) data:
 struct cudaDeviceProp deviceProperties; //on WINDOWS it seems we need to add the "Struct"
@@ -101,6 +99,9 @@ bool breakSearchAfterOne = true; //if true, the search will stop after the first
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 
+int* dev_decreaseNoGoods;
+
+
 int main(int argc, char const* argv[]) {
 
     cudaProfilerStart();
@@ -108,7 +109,7 @@ int main(int argc, char const* argv[]) {
     //we just check, then GPUSno won't be used to scale the program on multiple devices
     int GPUSno;
     if (cudaGetDeviceCount(&GPUSno) != cudaSuccess) {
-        //printError("No GPU detected");
+        printf("No GPU detected, buy a better one :)");
         return -1;
     }
 
@@ -155,6 +156,7 @@ int main(int argc, char const* argv[]) {
     printf("No of no goods per th %d, %d blocks will be launched \n", noNoGoodsperThread, blocksToLaunch_NG);
     
 
+    err = cudaMalloc((void**)&(dev_decreaseNoGoods), blocksToLaunch_NG*threadsPerBlock * sizeof(int));
 
     //**********************
     //USEFUL CODE STARTS HERE:
@@ -186,9 +188,11 @@ int main(int argc, char const* argv[]) {
 
     gpuErrchk( cudaPeekAtLastError() );
     //here threads deal with noGoods
-    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods/*, 1*/);
+    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
     gpuErrchk( cudaPeekAtLastError() );
-    
+    parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
+  
+  
     parallelSum <<<1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >>> (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods+1));
    
     decreaseVarsAppearingInNGsatisfied<<<blocksToLaunch_VARS, threadsPerBlock>>>(dev_matrix,returningNGchanged,dev_data.dev_partialAssignment,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
@@ -197,23 +201,21 @@ int main(int argc, char const* argv[]) {
     //end of pure literal check
 
 
-    
-
     gpuErrchk( cudaPeekAtLastError() );
   
-
-
-
-
 
     //unit propagation
     //************************************
     //we call unit prop on the device, yes it's not "device work" still less consuming than copying back and forth though
     unitPropagation2<<<1,1>>>((dev_data.dev_unitPropValuestoRemove),dev_data.dev_matrix_noGoodsStatus,dev_data.dev_noOfVarPerNoGood,(dev_data.dev_partialAssignment),dev_data.dev_lonelyVar,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, dev_matrix,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
 
-    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods /*, -1*/);
+    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods ,dev_decreaseNoGoods);
     
+    parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
+  
+    gpuErrchk( cudaPeekAtLastError() );
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
+    gpuErrchk( cudaPeekAtLastError() );
 
 
     decreaseVarsAppearingInNGsatisfied<<<blocksToLaunch_VARS, threadsPerBlock>>>(dev_matrix,returningNGchanged,dev_data.dev_partialAssignment,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
@@ -278,6 +280,7 @@ int main(int argc, char const* argv[]) {
     else {
         printf("\n\n\n**********UNSATISFIABLE**********\n\n\n");
     }
+
     cudaProfilerStop();
     //we free the cuda side
     deallocateCUDA(&dev_data);
@@ -288,11 +291,10 @@ int main(int argc, char const* argv[]) {
     t = clock() - t;
     double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
     printf("\n\n took %f seconds to execute \n", time_taken);
-
-
     return 0;
 }
     
+
 //reads the content of a simil DMACS file and populates the data structure
 // (not the fanciest function but it's called just once)
 int readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data, struct NoGoodDataCUDA_devDynamic* dev_data) {
@@ -301,7 +303,8 @@ int readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data, s
     char ch;
     ptr = fopen(str, "r");
 
-      if (NULL == ptr) {
+    if (NULL == ptr) {
+        //printError("No such file or can't be opened");
         printf("\nNo such file or can't be opened\n");
         return -1;
     }
@@ -545,22 +548,20 @@ __global__ void  pureLiteralCheck(int* dev_matrix, int* dev_partialAssignment, i
 //removes (assigns 'falsified' satisfied) the no goods if they contain the literal varIndex with the indicated sign
 
 //one th per no good
-__global__ void removeNoGoodSetsContaining(int* matrix, int* returningNGchanged, int* dev_partialAssignment, int* dev_matrix_noGoodsStatus, int* dev_currentNoGoods,int * SM_dev_currentNoGoods/*, int flipSign*/) {
+__global__ void removeNoGoodSetsContaining(int* matrix, int* returningNGchanged, int* dev_partialAssignment, int* dev_matrix_noGoodsStatus, int* dev_currentNoGoods,int * SM_dev_currentNoGoods,int* dev_decreaseNoGoods) {
 
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
 
-    extern __shared__ int decrease[];
+    extern __shared__ int decrease[]; //has block size
     //block resets the counter
-    __shared__ int valToDecrement;
     //the first thread of each block resets the counter for the block
     if(threadIdx.x==0){
         SM_dev_currentNoGoods[blockIdx.x]=0;
-        valToDecrement=0;
     }
     __syncthreads();
     register int i;
     decrease[threadIdx.x] = 0;
-
+    dev_decreaseNoGoods[thPos]=0;
     //we scan each no_good (each th scans reading the first cell of matrix and the relative var pos)
     for (int c = 0; c < dev_noNoGoodsperThread; c++) {
         i = thPos + c * dev_threadsPerBlock*dev_blocksToLaunch_NG;
@@ -581,15 +582,9 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* returningNGchanged,
         }
         __syncthreads();
     }
-    if (decrease[threadIdx.x] != 0) {
-        atomicAdd(&(valToDecrement), decrease[threadIdx.x]);
-    }
-    //non funzionerà con + blocchi
-    __syncthreads();
-    //the first thread of each block decreases the value
-    if(threadIdx.x ==0){
-        atomicAdd((SM_dev_currentNoGoods+ blockIdx.x), valToDecrement);
-    }
+    
+    dev_decreaseNoGoods[thPos]=decrease[threadIdx.x];
+    
 }
 
 
@@ -713,7 +708,8 @@ __global__ void chooseVar(int* dev_partialAssignment, int* varsAppearingInRemain
 }
 
 bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host data, int var, int value) {
-    
+ 
+    //cudaDeviceSynchronize();
     //printf("currentLonelyrent no goods: %d, current vars yet: %d assign var: %d=%d\n", data.currentNoGoods, data.varsYetToBeAssigned,var,value );
     //gpuErrchk( cudaPeekAtLastError() );
 
@@ -748,9 +744,10 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     //dev_varToAssign,dev_valueToAssing are gobal __device__
     assingValue<<<1,1>>>((dev_data.dev_partialAssignment),dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
 
-    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods/*, 1*/);
+    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
     //gpuErrchk( cudaPeekAtLastError() );
-
+    parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
+  
     //removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > ( dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods, -1);
     
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
@@ -768,7 +765,8 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     parallelSum <<<1, blocksToLaunch_VARS, blocksToLaunch_VARS * sizeof(int) >>> (SM_dev_varsYetToBeAssigned,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods);
 
     //here threads deal with noGoods
-    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods/*, 1*/);
+    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
+    parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
     parallelSum <<<1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >>> (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods+1));
    
     decreaseVarsAppearingInNGsatisfied<<<blocksToLaunch_VARS, threadsPerBlock>>>(dev_matrix,returningNGchanged,dev_data.dev_partialAssignment,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
@@ -784,7 +782,9 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     //we call unit prop on the device, yes it's not "device work" still less consuming than copying back and forth though
     unitPropagation2<<<1,1>>>((dev_data.dev_unitPropValuestoRemove),dev_data.dev_matrix_noGoodsStatus,dev_data.dev_noOfVarPerNoGood,(dev_data.dev_partialAssignment),dev_data.dev_lonelyVar,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, dev_matrix,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
 
-    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods /*, -1*/);
+    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
+    parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
+  
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
 
 
@@ -845,7 +845,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
         return false;
     }
     
-    return false;
+    return true;
 }
 
 
@@ -970,24 +970,27 @@ __global__ void assingValue(int *dev_partialAssignment,int *dev_varsYetToBeAssig
 }
 
 //a mini parallel reduction done in one step
+//a mini parallel reduction done in one step
 __global__ void parallelSum(int* inArray, int* out) {
-   extern __shared__ int s_array[];
+
+    extern __shared__ int s_array[];
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
-    s_array[thPos] = inArray[threadIdx.x];
+        s_array[threadIdx.x] = inArray[thPos];
     __syncthreads();
+    int previ=blockDim.x;
     for (int i = (int) blockDim.x / 2; i > 0; i >>= 1) {
-        if (thPos < i) {
-            s_array[thPos] += s_array[thPos + i];
+        if (threadIdx.x < i) {
+            s_array[threadIdx.x] += s_array[threadIdx.x + i];
         }
+        if(threadIdx.x==0 && previ%2!=0)
+            s_array[0] += s_array[previ-1];
+        previ=i;
         __syncthreads();
     }
-    __syncthreads();
-    if (thPos == 0) {
-        //i don't change the whole method if inArray is odd, i deal with it here, we add the last (odd) element, if the block has > 1 th (thus if we use a odd number >1 than SMs)
-        if(blockDim.x%2!=0 && blockDim.x > 1){
-            *out = *out + s_array[blockDim.x-1];
-        }
-        *out=*out+ s_array[0];
+    if (threadIdx.x == 0) {
+
+        //i don't change the whole method if inArray is of odd length, i deal with it here, we add the last (odd) element, if the block has > 1 th (thus if we use a odd number >1 than SMs)
+        *(out+blockIdx.x)=*(out+blockIdx.x)+ s_array[0];
     }
 }
 
