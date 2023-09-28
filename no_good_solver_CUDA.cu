@@ -34,7 +34,7 @@ void getNumberOfThreadsAndBlocks(int *, int* ,int *,int *);
 void deallocateHost(struct NoGoodDataCUDA_host*);
 void deallocateCUDA(struct NoGoodDataCUDA_devDynamic*);
 
-__global__ void pureLiteralCheck(int*, int*, int*, int*,int *);
+__global__ void pureLiteralCheck(int*, int*, int*, int*,int *,int *);
 __global__ void removeNoGoodSetsContaining(int*, int*, int*, int*, int*,int *,int *);
 __global__ void removeLiteralFromNoGoods(int*, int*,int*, int*, int*,int*);
 __global__ void assingValue(int*,int *,int *);
@@ -100,7 +100,7 @@ bool solutionFound = false; //if true, a solution was found, used to stop the se
 
 
 int* dev_decreaseNoGoods;
-
+int* dev_decreaseVars;
 
 int main(int argc, char const* argv[]) {
 
@@ -157,7 +157,7 @@ int main(int argc, char const* argv[]) {
     
 
     err = cudaMalloc((void**)&(dev_decreaseNoGoods), blocksToLaunch_NG*threadsPerBlock * sizeof(int));
-
+    err = cudaMalloc((void**)&(dev_decreaseVars), blocksToLaunch_VARS*threadsPerBlock * sizeof(int));
     //**********************
     //USEFUL CODE STARTS HERE:
     //**********************
@@ -178,9 +178,10 @@ int main(int argc, char const* argv[]) {
     gpuErrchk( cudaPeekAtLastError() );
     //pure literal check
     //***********************************
-    pureLiteralCheck <<<blocksToLaunch_VARS, threadsPerBlock,threadsPerBlock*sizeof(int) >>> (dev_matrix, dev_data.dev_partialAssignment, dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative, dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, SM_dev_varsYetToBeAssigned);
+    pureLiteralCheck <<<blocksToLaunch_VARS, threadsPerBlock,threadsPerBlock*sizeof(int) >>> (dev_matrix, dev_data.dev_partialAssignment, dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative, dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, SM_dev_varsYetToBeAssigned,dev_decreaseVars);
     gpuErrchk( cudaPeekAtLastError() );
-  
+    parallelSum <<<blocksToLaunch_VARS,threadsPerBlock, threadsPerBlock * sizeof(int) >>> (dev_decreaseVars,SM_dev_varsYetToBeAssigned);
+
      //we launch just the threads we need, it may not fill a multiple of a warp
     parallelSum <<<1, blocksToLaunch_VARS, blocksToLaunch_VARS * sizeof(int) >>> (SM_dev_varsYetToBeAssigned,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods);
 
@@ -495,18 +496,15 @@ void deallocateHost(struct NoGoodDataCUDA_host* data) {
 
 //removes the literal (by assigning a value) from the no goods IF it's UNASSIGNED and shows up with only one sign (in the remaining no goods)
 //one th per (constant no of) var
-__global__ void  pureLiteralCheck(int* dev_matrix, int* dev_partialAssignment, int* dev_varsAppearingInRemainingNoGoodsPositiveNegative , int* dev_varsYetToBeAssigned, int* SM_dev_varsYetToBeAssigned) {
+__global__ void  pureLiteralCheck(int* dev_matrix, int* dev_partialAssignment, int* dev_varsAppearingInRemainingNoGoodsPositiveNegative , int* dev_varsYetToBeAssigned, int* SM_dev_varsYetToBeAssigned,int* dev_decreaseVars) {
     
     //printf("here\n");
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
     extern __shared__ int decrease[];
     //block resets the counter
-    __shared__ int valToDecrement;
     //the first thread of each block resets the counter for the block
     if (threadIdx.x == 0) {
         SM_dev_varsYetToBeAssigned[blockIdx.x]=0;
-        valToDecrement = 0;
-
     }
     __syncthreads();
     register int i;
@@ -531,17 +529,8 @@ __global__ void  pureLiteralCheck(int* dev_matrix, int* dev_partialAssignment, i
         }
         __syncthreads();
     }
-    if (decrease[threadIdx.x] != 0) {
-        //printf("we also decrease\n");
-        atomicAdd(&(valToDecrement), decrease[threadIdx.x]);
-    }
 
-    __syncthreads();
-    //the first thread of each block decreases the value
-    if (threadIdx.x == 0) {
-        atomicAdd((SM_dev_varsYetToBeAssigned+ blockIdx.x), valToDecrement);
-        //printf("we decrement SM_dev_varsYetToBeAssigned[%d] to %d\n",blockIdx.x,valToDecrement);
-    }
+    dev_decreaseVars[thPos]=decrease[threadIdx.x];
 
 }
 
@@ -760,7 +749,9 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
 
     //pure literal check
     //***********************************
-    pureLiteralCheck <<<blocksToLaunch_VARS, threadsPerBlock,threadsPerBlock*sizeof(int) >>> (dev_matrix, dev_data.dev_partialAssignment, dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative, dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, SM_dev_varsYetToBeAssigned);
+    pureLiteralCheck <<<blocksToLaunch_VARS, threadsPerBlock,threadsPerBlock*sizeof(int) >>> (dev_matrix, dev_data.dev_partialAssignment, dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative, dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, SM_dev_varsYetToBeAssigned,dev_decreaseVars);
+    parallelSum <<<blocksToLaunch_VARS,threadsPerBlock, threadsPerBlock * sizeof(int) >>> (dev_decreaseVars,SM_dev_varsYetToBeAssigned);
+
      //we launch just the threads we need, it may not fill a multiple of a warp
     parallelSum <<<1, blocksToLaunch_VARS, blocksToLaunch_VARS * sizeof(int) >>> (SM_dev_varsYetToBeAssigned,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods);
 
