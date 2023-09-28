@@ -713,10 +713,10 @@ __global__ void chooseVar(int* dev_partialAssignment, int* varsAppearingInRemain
 }
 
 bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host data, int var, int value) {
-
     cudaDeviceSynchronize();
     //printf("currentLonelyrent no goods: %d, current vars yet: %d assign var: %d=%d\n", data.currentNoGoods, data.varsYetToBeAssigned,var,value );
     //gpuErrchk( cudaPeekAtLastError() );
+
     //if we want to stop after the first solution and it's already found
     if (solutionFound && breakSearchAfterOne){
         return true;
@@ -971,23 +971,24 @@ __global__ void assingValue(int *dev_partialAssignment,int *dev_varsYetToBeAssig
 
 //a mini parallel reduction done in one step
 __global__ void parallelSum(int* inArray, int* out) {
-   extern __shared__ int s_array[];
+    extern __shared__ int s_array[];
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
-    s_array[thPos] = inArray[threadIdx.x];
-    __syncthreads();
+    s_array[threadIdx.x] = inArray[thPos];
+    int previ=blockDim.x;
     for (int i = (int) blockDim.x / 2; i > 0; i >>= 1) {
-        if (thPos < i) {
-            s_array[thPos] += s_array[thPos + i];
+        if (threadIdx.x < i) {
+            s_array[threadIdx.x] += s_array[threadIdx.x + i];
+        }
+        if(threadIdx.x==0){
+            if(previ%2!=0)
+                s_array[0] += s_array[previ-1];
+            previ=i;
         }
         __syncthreads();
     }
-    __syncthreads();
-    if (thPos == 0) {
-        //i don't change the whole method if inArray is odd, i deal with it here, we add the last (odd) element, if the block has > 1 th (thus if we use a odd number >1 than SMs)
-        if(blockDim.x%2!=0 && blockDim.x > 1){
-            *out = *out + s_array[blockDim.x-1];
-        }
-        *out=*out+ s_array[0];
+
+    if (threadIdx.x == 0) {
+        *(out+blockIdx.x)=*(out+blockIdx.x)+ s_array[0];
     }
 }
 
