@@ -970,24 +970,26 @@ __global__ void assingValue(int *dev_partialAssignment,int *dev_varsYetToBeAssig
 }
 
 //a mini parallel reduction done in one step
+//a mini parallel reduction done in one step
 __global__ void parallelSum(int* inArray, int* out) {
+
     extern __shared__ int s_array[];
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
-    s_array[threadIdx.x] = inArray[thPos];
+        s_array[threadIdx.x] = inArray[thPos];
+    __syncthreads();
     int previ=blockDim.x;
     for (int i = (int) blockDim.x / 2; i > 0; i >>= 1) {
         if (threadIdx.x < i) {
             s_array[threadIdx.x] += s_array[threadIdx.x + i];
         }
-        if(threadIdx.x==0){
-            if(previ%2!=0)
-                s_array[0] += s_array[previ-1];
-            previ=i;
-        }
+        if(threadIdx.x==0 && previ%2!=0)
+            s_array[0] += s_array[previ-1];
+        previ=i;
         __syncthreads();
     }
-
     if (threadIdx.x == 0) {
+
+        //i don't change the whole method if inArray is of odd length, i deal with it here, we add the last (odd) element, if the block has > 1 th (thus if we use a odd number >1 than SMs)
         *(out+blockIdx.x)=*(out+blockIdx.x)+ s_array[0];
     }
 }
