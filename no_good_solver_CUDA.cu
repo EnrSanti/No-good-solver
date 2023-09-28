@@ -100,7 +100,6 @@ int* SM_dev_currentNoGoods;
 bool breakSearchAfterOne = true; //if true, the search will stop after the first solution is found
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
-int counter=0;
 int main(int argc, char const* argv[]) {
 
     cudaProfilerStart();
@@ -289,7 +288,6 @@ int main(int argc, char const* argv[]) {
     double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
     printf("\n\n took %f seconds to execute \n", time_taken);
 
-    printf("counter %d\n",counter);
     return 0;
 }
     
@@ -715,10 +713,10 @@ __global__ void chooseVar(int* dev_partialAssignment, int* varsAppearingInRemain
 }
 
 bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host data, int var, int value) {
+
     cudaDeviceSynchronize();
     //printf("currentLonelyrent no goods: %d, current vars yet: %d assign var: %d=%d\n", data.currentNoGoods, data.varsYetToBeAssigned,var,value );
     //gpuErrchk( cudaPeekAtLastError() );
-    counter++;
     //if we want to stop after the first solution and it's already found
     if (solutionFound && breakSearchAfterOne){
         return true;
