@@ -189,7 +189,7 @@ int main(int argc, char const* argv[]) {
 
     gpuErrchk( cudaPeekAtLastError() );
     //here threads deal with noGoods
-    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
+    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,(threadsPerBlock+1)*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
     gpuErrchk( cudaPeekAtLastError() );
     parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
   
@@ -210,7 +210,7 @@ int main(int argc, char const* argv[]) {
     //we call unit prop on the device, yes it's not "device work" still less consuming than copying back and forth though
     unitPropagation2<<<1,1>>>((dev_data.dev_unitPropValuestoRemove),dev_data.dev_matrix_noGoodsStatus,dev_data.dev_noOfVarPerNoGood,(dev_data.dev_partialAssignment),dev_data.dev_lonelyVar,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, dev_matrix,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
 
-    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods ,dev_decreaseNoGoods);
+    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,(threadsPerBlock+1)*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods ,dev_decreaseNoGoods);
     
     parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
   
@@ -506,6 +506,7 @@ __global__ void  pureLiteralCheck(int* dev_matrix, int* dev_partialAssignment, i
     if (threadIdx.x == 0) {
         SM_dev_varsYetToBeAssigned[blockIdx.x]=0;
     }
+
     __syncthreads();
     register int i;
     decrease[threadIdx.x] = 0;
@@ -542,6 +543,10 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* returningNGchanged,
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
 
     extern __shared__ int decrease[]; //has block size
+    //to avoid dealing with other "extern" and more complex indexes, we allocate the following two arrays to the max number of threads per block supported (may lead to a bit of waste if the GPU has 128 cores per SM)
+    __shared__ int s_returningNGchanged[193]; //one more to avoid blank conflict for the next array
+    __shared__ int s_dev_matrix_noGoodsStatus[192];
+   
     //block resets the counter
     //the first thread of each block resets the counter for the block
     if(threadIdx.x==0){
@@ -550,25 +555,27 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* returningNGchanged,
     __syncthreads();
     register int i;
     decrease[threadIdx.x] = 0;
-    dev_decreaseNoGoods[thPos]=0;
+   
     //we scan each no_good (each th scans reading the first cell of matrix and the relative var pos)
     for (int c = 0; c < dev_noNoGoodsperThread; c++) {
         i = thPos + c * dev_threadsPerBlock*dev_blocksToLaunch_NG;
 
         //first we reset the value (may be dirty since used in the prev. iteration) 
-        returningNGchanged[i]=0;
+        s_returningNGchanged[threadIdx.x]=0;
         if (i < dev_noNoGoods) {
+            s_dev_matrix_noGoodsStatus[threadIdx.x]=(dev_matrix_noGoodsStatus)[i];
             //fixed a no good (thread) we loop on the row of the matrix (in this way ONLY ONE thead access each cell of the first column)
             for (int varIndex = 1; varIndex <= dev_noVars; varIndex++) {
-                if (dev_partialAssignment[varIndex] != UNASSIGNED && *(matrix + i * (dev_noVars + 1) + varIndex) == -dev_partialAssignment[varIndex] && dev_matrix_noGoodsStatus[i] != SATISFIED) {
-                    (dev_matrix_noGoodsStatus)[i] = SATISFIED;
+                if (dev_partialAssignment[varIndex] != UNASSIGNED && *(matrix + i * (dev_noVars + 1) + varIndex) == -dev_partialAssignment[varIndex] && s_dev_matrix_noGoodsStatus[threadIdx.x] != SATISFIED) {
+                    //tutte operazioni in shared
+                    s_dev_matrix_noGoodsStatus[threadIdx.x] = SATISFIED;
                     decrease[threadIdx.x]--;
-                    
-                    //WE NEED TO DECREASE dev_varsAppearingInRemainingNoGoodsPositiveNegative according to the ones present in  [i] and we use the following return value, to call another kernel
-                    returningNGchanged[i]=1;
+                    s_returningNGchanged[threadIdx.x]=1;
                 }
             }
         }
+        returningNGchanged[i]=s_returningNGchanged[threadIdx.x];
+        dev_matrix_noGoodsStatus[i]=s_dev_matrix_noGoodsStatus[threadIdx.x];
         __syncthreads();
     }
     
@@ -583,17 +590,18 @@ __global__ void decreaseVarsAppearingInNGsatisfied(int* matrix, int* NGsthatChan
 
 
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
-
+    __shared__ int s_partialOffset[192];
     for (int c = 0; c < dev_noOfVarsPerThread; c++) {
         int i = thPos + c * dev_threadsPerBlock*dev_blocksToLaunch_VARS;
         //we check varaible i
         if (i <= dev_noVars && i!=0){
+            s_partialOffset[threadIdx.x]=partialAssignment[i];
             //for each NG we check if it has changed
             for(int ngIndex=0; ngIndex<dev_noNoGoods; ngIndex++){
                 //if the NG changed and in that NG we had a literal
-                if(NGsthatChanged[ngIndex]==1 && *(matrix + ngIndex * (dev_noVars + 1) + i)!=NO_LIT && partialAssignment[i]==UNASSIGNED){
+                if(NGsthatChanged[ngIndex]==1 && matrix[ngIndex * (dev_noVars + 1) + i]!=NO_LIT && s_partialOffset[threadIdx.x]==UNASSIGNED){
                     //printf("literal sign: %d  (var: %d), 0 for negative, 1 for positve: %d\n",*(matrix + ngIndex * (dev_noVars + 1) + i),i ,((int)((1 + (*(matrix + ngIndex * (dev_noVars + 1) + i))) / 2)));
-                    (dev_varsAppearingInRemainingNoGoodsPositiveNegative)[i + (dev_noVars + 1) * ((int)((1 + (*(matrix + ngIndex * (dev_noVars + 1) + i))) / 2))]--;
+                    (dev_varsAppearingInRemainingNoGoodsPositiveNegative)[i + (dev_noVars + 1) * ((int)((1 + (matrix[ngIndex * (dev_noVars + 1) + i])) / 2))]--;
                 }
 
             }
@@ -603,9 +611,8 @@ __global__ void decreaseVarsAppearingInNGsatisfied(int* matrix, int* NGsthatChan
      }
 
 }
-//each th deals with a ng
+//only 1 th
 __global__ void unitPropagation2(int* dev_unitPropValuestoRemove,int* dev_matrix_noGoodsStatus, int* dev_noOfVarPerNoGood,int* dev_partialAssignment,int *dev_lonelyVar,int *dev_varsYetToBeAssigned_dev_currentNoGoods, int *dev_matrix, int* dev_varsAppearingInRemainingNoGoodsPositiveNegative) {
-    //printf("in kernel\n\n");
 
     for (int i = 1; i < dev_noVars + 1; i++) {
         (dev_unitPropValuestoRemove)[i] = 0; //we reset
@@ -614,15 +621,10 @@ __global__ void unitPropagation2(int* dev_unitPropValuestoRemove,int* dev_matrix
     for (int i = 0; i < dev_noNoGoods; i++) {
         //if the no good is not satisfied and it has only one variable to assign we assign it
         if (dev_matrix_noGoodsStatus[i] == UNSATISFIED && dev_noOfVarPerNoGood[i] == 1 && dev_partialAssignment[dev_lonelyVar[i]] == UNASSIGNED) {
-
-            //lonelyVar[i] is a column index
-            //assing variable to value
-            //printf("we assing var %d\n",dev_lonelyVar[i]);
             (dev_partialAssignment)[dev_lonelyVar[i]] = *(dev_matrix+i*(dev_noVars + 1)+ dev_lonelyVar[i]) > 0 ? FALSE : TRUE;
             (*dev_varsYetToBeAssigned_dev_currentNoGoods)--;
             (dev_varsAppearingInRemainingNoGoodsPositiveNegative)[dev_lonelyVar[i]]=0;
-            (dev_varsAppearingInRemainingNoGoodsPositiveNegative)[dev_lonelyVar[i]+dev_noVars+1]=0;
-          
+            (dev_varsAppearingInRemainingNoGoodsPositiveNegative)[dev_lonelyVar[i]+dev_noVars+1]=0;     
         }
     }
 }
@@ -634,6 +636,10 @@ __global__ void removeLiteralFromNoGoods(int* dev_matrix, int* dev_currentNoGood
 
     extern __shared__ int currentLonely[];
     __shared__ int block_conflict;
+    //to avoid dealing with other "extern" and more complex indexes, we allocate the following two arrays to the max number of threads per block supported (may lead to a bit of waste if the GPU has 128 cores per SM)
+    __shared__ int s_dev_currentNoGoods[192];
+    __shared__ int s_dev_noOfVarPerNoGood[192];
+
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
     int i;
     //if we are the thread 0 we reset the globla conflict
@@ -650,31 +656,34 @@ __global__ void removeLiteralFromNoGoods(int* dev_matrix, int* dev_currentNoGood
     for (int c = 0; c < dev_noNoGoodsperThread; c++) {
         i = thPos + c * dev_threadsPerBlock*dev_blocksToLaunch_NG;
         if (i < dev_noNoGoods) {
+            s_dev_currentNoGoods[threadIdx.x]=dev_currentNoGoods[i];
             //foreach var
-            dev_noOfVarPerNoGood[i]=0;
+            s_dev_noOfVarPerNoGood[threadIdx.x]=0;
+           // dev_noOfVarPerNoGood[i]=0;
             for (int varIndex = 1; varIndex <= dev_noVars; varIndex++) {
             
                 if (block_conflict == CONFLICT) //this if doesn't cause divergence :) either all or none ths in the warp (better in the block) behave the same
                    return;
                 
-                if(partialAssignment[varIndex] == UNASSIGNED  && (*(dev_currentNoGoods + i)) == UNSATISFIED &&  (*(dev_matrix + i * (dev_noVars + 1) + varIndex))!= NO_LIT){
+                if(partialAssignment[varIndex] == UNASSIGNED  && s_dev_currentNoGoods[threadIdx.x] == UNSATISFIED &&  (*(dev_matrix + i * (dev_noVars + 1) + varIndex))!= NO_LIT){
                     //printf("th %d increasing vars in noGood %d cause of var %d \n",thPos, i,varIndex );
-                    dev_noOfVarPerNoGood[i]++;
+                    s_dev_noOfVarPerNoGood[threadIdx.x]++;
                     //printf("thPOos < 191: %d\n",threadIdx.x);
                     currentLonely[threadIdx.x]=varIndex; //it will be used only if at the end dev_noOfVarPerNoGood[]=0 else, can contain whatever
                 }
             }
-            if(dev_noOfVarPerNoGood[i]==1 && (*(dev_currentNoGoods + i))== UNSATISFIED){
+            if(s_dev_noOfVarPerNoGood[threadIdx.x]==1 && s_dev_currentNoGoods[threadIdx.x]== UNSATISFIED){
                 dev_lonelyVar[i]=currentLonely[threadIdx.x];
                 //printf("lonely upd\n");
             }
-            if (dev_noOfVarPerNoGood[i] == 0 && (*(dev_currentNoGoods + i)) == UNSATISFIED) {
+            if (s_dev_noOfVarPerNoGood[threadIdx.x] == 0 && s_dev_currentNoGoods[threadIdx.x] == UNSATISFIED) {
                
                 atomicCAS(&block_conflict, NO_CONFLICT, CONFLICT);
                 atomicCAS((SM_dev_conflict+blockIdx.x), NO_CONFLICT, CONFLICT);
                 //printf("conflict lol cause ng: %d %d, block. %d %d\n",i,*(dev_matrix + i * (dev_noVars + 1)),block_conflict,*(SM_dev_conflict+blockIdx.x)); 
                 //why do we use block_conflict if we also do atomicCAS on SM_dev_conflict? because the first if is faster in shared
             }
+            dev_noOfVarPerNoGood[i]=s_dev_noOfVarPerNoGood[threadIdx.x];
         }
         //__syncthreads();
     }
@@ -733,7 +742,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     //dev_varToAssign,dev_valueToAssing are gobal __device__
     assingValue<<<1,1>>>((dev_data.dev_partialAssignment),dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
 
-    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
+    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,(threadsPerBlock+1)*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
     //gpuErrchk( cudaPeekAtLastError() );
     parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
   
@@ -756,7 +765,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     parallelSum <<<1, blocksToLaunch_VARS, blocksToLaunch_VARS * sizeof(int) >>> (SM_dev_varsYetToBeAssigned,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods);
 
     //here threads deal with noGoods
-    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
+    removeNoGoodSetsContaining <<<blocksToLaunch_NG, threadsPerBlock,(threadsPerBlock+1)*sizeof(int)>>> (dev_matrix,returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
     parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
     parallelSum <<<1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >>> (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods+1));
    
@@ -773,7 +782,7 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
     //we call unit prop on the device, yes it's not "device work" still less consuming than copying back and forth though
     unitPropagation2<<<1,1>>>((dev_data.dev_unitPropValuestoRemove),dev_data.dev_matrix_noGoodsStatus,dev_data.dev_noOfVarPerNoGood,(dev_data.dev_partialAssignment),dev_data.dev_lonelyVar,dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods, dev_matrix,dev_data.dev_varsAppearingInRemainingNoGoodsPositiveNegative);
 
-    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,threadsPerBlock*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
+    removeNoGoodSetsContaining << <blocksToLaunch_NG, threadsPerBlock,(threadsPerBlock+1)*sizeof(int) >> > (dev_matrix, returningNGchanged, dev_data.dev_partialAssignment, dev_data.dev_matrix_noGoodsStatus, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1), SM_dev_currentNoGoods,dev_decreaseNoGoods);
     parallelSum <<<blocksToLaunch_NG, threadsPerBlock, sizeof(int)* threadsPerBlock >> > (dev_decreaseNoGoods, SM_dev_currentNoGoods);
   
     parallelSum << <1, blocksToLaunch_NG, sizeof(int)* blocksToLaunch_NG >> > (SM_dev_currentNoGoods, (dev_data.dev_varsYetToBeAssigned_dev_currentNoGoods + 1));
@@ -966,7 +975,7 @@ __global__ void parallelSum(int* inArray, int* out) {
 
     extern __shared__ int s_array[];
     int thPos = blockIdx.x * blockDim.x + threadIdx.x;
-        s_array[threadIdx.x] = inArray[thPos];
+    s_array[threadIdx.x] = inArray[thPos];
     __syncthreads();
     int previ=blockDim.x;
     for (int i = (int) blockDim.x / 2; i > 0; i >>= 1) {
