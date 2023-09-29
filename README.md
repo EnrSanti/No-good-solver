@@ -6,9 +6,11 @@ It contains both codes, for serial testing and parallel (CUDA) testing.
 
 It contains different folders with different CNF-models (different sizes) and their respective no-good-model counterparts. 
 
-**Usage of test_version.c: (compile, e.g. gcc test_version.c -o test_version), then call ./test_version**
+**Usage of test_serial.c: (compile, e.g. gcc test_serial.c -o test_serial), then call ./test_serial**
 
-**Usage of test_version_CUDA.cu: (compile, e.g.  nvcc test_version_CUDA.cu -o test_version_CUDA) then call ./test_version_CUDA**
+**Usage of test_advanced_startingPoint_CUDA.cu: (compile, e.g.  nvcc test_test_advanced_startingPoint_CUDA.cu -o test_version_CUDA) then call ./test_version_CUDA**
+
+**The same goes for test_version_main.cu
 
 ## The test folders on which perform the tests must be set manually within the main functions of both files.
 
