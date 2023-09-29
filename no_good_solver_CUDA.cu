@@ -815,7 +815,6 @@ bool solve(struct NoGoodDataCUDA_devDynamic dev_data, struct NoGoodDataCUDA_host
 
     //if the partialAssignment satisfies (falsifies) all the clauses we have found a solution
     if (data.currentNoGoods == 0) {
-        printf("SATISFIABLE\n");
         //printf("Assignment:\n");
         //printVarArray(data.partialAssignment);
         solutionFound = true;
@@ -900,6 +899,8 @@ void deallocateCUDA(struct NoGoodDataCUDA_devDynamic *data_dev) {
     cudaFree(SM_dev_varsYetToBeAssigned);
     cudaFree(SM_dev_currentNoGoods);
     cudaFree(SM_dev_conflict);
+    cudaFree(dev_decreaseNoGoods);
+    cudaFree(dev_decreaseVars);
 }
 
 void storePrevStateOnDevice(struct NoGoodDataCUDA_devDynamic dev_data, int** dev_prevPartialAssignment, int** dev_prevNoOfVarPerNoGood, int** dev_prevLonelyVar, int** dev_prevNoGoodStatus, int** dev_prevVarsAppearingInRemainingNoGoodsPositiveNegative, int** dev_prevVarsYetToBeAssigned_prevCurrentNoGoods, int** dev_prevUnitPropValuestoRemove) {
