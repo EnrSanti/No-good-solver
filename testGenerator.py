@@ -1,8 +1,9 @@
 #!/usr/bin/python3
 
 
-#WARNING: THIS PROGRAM ISN't OPTIMIZED AD ALL
-#could be done much better using maps, anyway, it's just to create instances
+#WARNING: THIS PROGRAM ISN't OPTIMIZED 
+#could be done much better, anyway, it's just to create instances
+#still now with maps is somehow usable
 
 import random
 from random import choice
@@ -13,10 +14,10 @@ from random import choice
 filesToCreate=50
 
 #how many clauses we want in an instance (max and min)
-minNoGoods=10
+minNoGoods=30
 maxNoGoods=2000
 
-minNoVars=5
+minNoVars=10
 maxNoVars=1000
 
 osType="linux"; # "windows" or "linux" #used just to specify the directory format
@@ -35,11 +36,11 @@ def generate_random(from_,to_, alreadyInNoGood):
 
 def generateNoGood(novars,actualVars):
 	nogoodVars=random.randint(1, int( novars/1.5))
-	alreadyInNoGood=[]
+	alreadyInNoGood={}
 	for varInRow in range(0,nogoodVars):	
 		#we want to have a variable or its negation
 		var=generate_random(1, novars,alreadyInNoGood)
-		alreadyInNoGood.append(var)
+		alreadyInNoGood[var]=var
 		var=var*random.choice([-1, 1])
 		f.write(str(var)+' ')
 		fSAT.write(str(-var)+' ')
