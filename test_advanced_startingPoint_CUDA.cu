@@ -101,7 +101,7 @@ bool breakSearchAfterOne = true; //if true, the search will stop after the first
 bool solutionFound = false; //if true, a solution was found, used to stop the search
 
 int main(int argc, char const* argv[]){
-    for(int i=1; i<51; i++){
+    for(int i=1; i<31; i++){
         SM_dev_varsYetToBeAssigned=NULL;
         SM_dev_currentNoGoods=NULL;
         returningNGchanged=NULL;
@@ -109,7 +109,7 @@ int main(int argc, char const* argv[]){
         solutionFound = false;
         conflict = RESET_CONFLCIT;
         cudaError_t err = cudaMemcpyToSymbol(dev_conflict, &conflict, sizeof(int), 0, cudaMemcpyHostToDevice);
-        char string[100]="testsNG_highVariability/test_";
+        char string[100]="testsNG/test_";
         char str[3];
         sprintf(str, "%d", i);
         strcat(string, str);
@@ -606,8 +606,8 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* returningNGchanged,
         i = thPos + c * dev_threadsPerBlock*dev_blocksToLaunch_NG;
 
         //first we reset the value (may be dirty since used in the prev. iteration) 
-        returningNGchanged[i]=0;
         if (i < dev_noNoGoods) {
+            returningNGchanged[i]=0;
             //fixed a no good (thread) we loop on the row of the matrix (in this way ONLY ONE thead access each cell of the first column)
             for (int varIndex = 1; varIndex <= dev_noVars; varIndex++) {
                 if (dev_partialAssignment[varIndex] != UNASSIGNED && *(matrix + i * (dev_noVars + 1) + varIndex) == -dev_partialAssignment[varIndex] && dev_matrix_noGoodsStatus[i] != SATISFIED) {
