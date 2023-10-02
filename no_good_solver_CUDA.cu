@@ -566,8 +566,8 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* returningNGchanged,
         i = thPos + c * dev_threadsPerBlock*dev_blocksToLaunch_NG;
 
         //first we reset the value (may be dirty since used in the prev. iteration) 
-        returningNGchanged[i]=0;
         if (i < dev_noNoGoods) {
+            returningNGchanged[i]=0;
             //fixed a no good (thread) we loop on the row of the matrix (in this way ONLY ONE thead access each cell of the first column)
             for (int varIndex = 1; varIndex <= dev_noVars; varIndex++) {
                 if (dev_partialAssignment[varIndex] != UNASSIGNED && *(matrix + i * (dev_noVars + 1) + varIndex) == -dev_partialAssignment[varIndex] && dev_matrix_noGoodsStatus[i] != SATISFIED) {
