@@ -624,9 +624,10 @@ __global__ void removeNoGoodSetsContaining(int* matrix, int* returningNGchanged,
                     s_returningNGchanged[threadIdx.x]=1;
                 }
             }
+            returningNGchanged[i]=s_returningNGchanged[threadIdx.x];
+            dev_matrix_noGoodsStatus[i]=s_dev_matrix_noGoodsStatus[threadIdx.x];
         }
-        returningNGchanged[i]=s_returningNGchanged[threadIdx.x];
-        dev_matrix_noGoodsStatus[i]=s_dev_matrix_noGoodsStatus[threadIdx.x];
+       
         __syncthreads();
     }
     
