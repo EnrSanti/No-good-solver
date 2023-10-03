@@ -33,10 +33,10 @@ bool solutionFound = false; //if true, a solution was found, used to stop the se
 
 
 int main(int argc, char const* argv[]){
-     for(int i=1; i<51; i++){
+     for(int i=1; i<31; i++){
         //resetting vars:
         solutionFound = false;
-        char string[100]="testsNG_highVariability/test_";
+        char string[200]="tests/testsNG/testsNG_small/test_";
         char str[3];
         sprintf(str, "%d", i);
         strcat(string, str);
