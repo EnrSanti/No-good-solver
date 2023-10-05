@@ -4,24 +4,27 @@
 #include <stdlib.h>
 #include "common.h"
 
-int readFile_allocateMatrix(const char*, struct NoGoodData*);
-void printError(char*);
-void popualteMatrix(FILE*, struct NoGoodData*);
-void printMatrix(int**);
-void printVarArray(int*);
-void allocateMatrix(int***);
-void deallocateMatrix(int***, int **, int **,int **,int**);
 bool solve(struct NoGoodData, int, int);
 int unitPropagation(struct NoGoodData*);
 void pureLiteralCheck(struct NoGoodData*);
 void removeNoGoodSetsContaining(int***, int*, int**,int *, int, int);
 int chooseVar(int*, int*);
-void learnClause();
 void assignValueToVar(struct NoGoodData*, int, int);
 int removeLiteralFromNoGoods(struct NoGoodData*, int, int);
+
+void popualteMatrix(FILE*, struct NoGoodData*);
+int readFile_allocateMatrix(const char*, struct NoGoodData*);
+void allocateMatrix(int***);
+void deallocateMatrix(int***, int **, int **,int **,int**);
+
 void storePrevState(struct NoGoodData, int**, int**, int**, int**, int**);
 void revert(struct NoGoodData*, int**, int**, int**, int**, int**);
+
 //void backJump();
+void printMatrix(int**);
+void printVarArray(int*);
+void learnClause();
+void printError(char*);
 
 int noVars = 0; //the number of vars in the model
 int noNoGoods = 0; //the no of clauses (initially) in the model
@@ -117,10 +120,13 @@ int readFile_allocateMatrix(const char* str, struct NoGoodData* data) {
     }
 
     //skip over "p nogood"
-    int i = 8;
-    while (!feof(ptr) && i > 0) {
-        ch = fgetc(ptr);
-        i--;
+    
+
+    char pNG[9];
+    fgets(pNG, 8, ptr);
+    if(strcmp(pNG," nogood")!=0){
+    	printf("File format is not correct\n");
+    	return -1;
     }
 
     //ignore return value for now
