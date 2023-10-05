@@ -329,10 +329,11 @@ int readFile_allocateMatrix(const char* str, struct NoGoodDataCUDA_host* data, s
     }
 
     //skip over "p nogood"
-    int i = 8;
-    while (!feof(ptr) && i > 0) {
-        ch = fgetc(ptr);
-        i--;
+     char pNG[9];
+    fgets(pNG, 8, ptr);
+    if(strcmp(pNG," nogood")!=0){
+        printf("File format is not correct\n");
+        return -1;
     }
 
     //ignore return value for now
